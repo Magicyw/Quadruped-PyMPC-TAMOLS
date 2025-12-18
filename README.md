@@ -29,7 +29,8 @@ Features terrain-aware foothold adaptation:
 - TAMOLS-inspired terrain-aware foothold planner for rough terrain
 - local search with edge avoidance, roughness penalty, and kinematic constraints
 - configurable cost weights and search parameters
-- see [TAMOLS documentation](docs/TAMOLS_FOOTHOLD_ADAPTATION.md) for details
+- custom stepping stones terrain for testing (梅花桩地图)
+- see [TAMOLS documentation](docs/TAMOLS_FOOTHOLD_ADAPTATION.md) and [stepping stones terrain](docs/STEPPING_STONES_TERRAIN.md) for details
 
 ## Installation and Run
 
