@@ -263,7 +263,6 @@ class VisualFootholdAdaptation:
         Returns:
             float: gradient magnitude cost
         """
-        patch_size = self.tamols_params.get('patch_size', 3)
         delta = 0.02  # Small offset for finite difference
 
         # Sample heights in a cross pattern (±x, ±y)
@@ -299,7 +298,6 @@ class VisualFootholdAdaptation:
         Returns:
             float: roughness (variance) cost
         """
-        patch_size = self.tamols_params.get('patch_size', 3)
         delta = 0.03
 
         # Sample heights in a small patch

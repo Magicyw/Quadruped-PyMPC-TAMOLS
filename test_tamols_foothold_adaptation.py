@@ -35,7 +35,7 @@ class MockHeightMap:
         Returns:
             float: height at position, or None if invalid
         """
-        x, y = position[0], position[1]
+        x = position[0]
 
         if self.terrain_type == 'flat':
             return 0.0
@@ -66,10 +66,10 @@ def test_candidate_generation():
     print("\n=== Test 1: Candidate Generation ===")
 
     # Import here to avoid circular imports
+    from quadruped_pympc import config as cfg
     from quadruped_pympc.helpers.visual_foothold_adaptation import (
         VisualFootholdAdaptation,
     )
-    from quadruped_pympc import config as cfg
 
     # Setup TAMOLS strategy
     cfg.simulation_params['visual_foothold_adaptation'] = 'tamols'
@@ -105,10 +105,10 @@ def test_edge_avoidance():
     """Test that TAMOLS strategy avoids edges/steps."""
     print("\n=== Test 2: Edge Avoidance ===")
 
+    from quadruped_pympc import config as cfg
     from quadruped_pympc.helpers.visual_foothold_adaptation import (
         VisualFootholdAdaptation,
     )
-    from quadruped_pympc import config as cfg
 
     # Setup TAMOLS strategy
     cfg.simulation_params['visual_foothold_adaptation'] = 'tamols'
@@ -185,10 +185,10 @@ def test_kinematic_constraints():
     """Test that kinematic reachability constraints are enforced."""
     print("\n=== Test 3: Kinematic Reachability ===")
 
+    from quadruped_pympc import config as cfg
     from quadruped_pympc.helpers.visual_foothold_adaptation import (
         VisualFootholdAdaptation,
     )
-    from quadruped_pympc import config as cfg
 
     # Setup TAMOLS strategy
     cfg.simulation_params['visual_foothold_adaptation'] = 'tamols'
@@ -207,12 +207,6 @@ def test_kinematic_constraints():
 
     # Place seed foothold very far from hip (outside kinematic reach)
     seed_far = np.array([1.5, 0.0, 0.0])  # Way too far
-    reference_footholds = LegsAttr(
-        FL=seed_far.copy(),
-        FR=seed_far.copy(),
-        RL=seed_far.copy(),
-        RR=seed_far.copy(),
-    )
 
     hip_positions = LegsAttr(
         FL=np.array([0.3, 0.15, 0.3]),
@@ -249,14 +243,14 @@ def test_backward_compatibility():
     """Test that existing strategies ('blind', 'height') still work."""
     print("\n=== Test 4: Backward Compatibility ===")
 
+    from quadruped_pympc import config as cfg
     from quadruped_pympc.helpers.visual_foothold_adaptation import (
         VisualFootholdAdaptation,
     )
-    from quadruped_pympc import config as cfg
 
     # Test 'blind' strategy
     cfg.simulation_params['visual_foothold_adaptation'] = 'blind'
-    vfa_blind = VisualFootholdAdaptation(
+    _ = VisualFootholdAdaptation(
         legs_order=['FL', 'FR', 'RL', 'RR'], adaptation_strategy='blind'
     )
     print("✓ 'blind' strategy initialized")
