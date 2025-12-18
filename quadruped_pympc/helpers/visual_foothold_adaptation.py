@@ -228,9 +228,11 @@ class VisualFootholdAdaptation:
         l_min = self.tamols_params.get('l_min', {}).get(self.robot_name, 0.15)
         l_max = self.tamols_params.get('l_max', {}).get(self.robot_name, 0.45)
 
-        # Hard constraint: reject if outside bounds
-        if distance < l_min or distance > l_max:
-            kinematic_cost = w_kin * max(l_min - distance, distance - l_max, 0.0) ** 2
+        # Penalize candidates outside kinematic bounds
+        if distance < l_min:
+            kinematic_cost = w_kin * (l_min - distance) ** 2
+        elif distance > l_max:
+            kinematic_cost = w_kin * (distance - l_max) ** 2
         else:
             kinematic_cost = 0.0
 
