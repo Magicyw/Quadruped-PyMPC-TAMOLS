@@ -184,3 +184,5 @@ Potential improvements for future development:
 4. **Dynamic cost weights**: Adjust weights based on gait phase or velocity
 5. **GPU acceleration**: Parallelize candidate evaluation for very large search spaces
 6. **Learned terrain costs**: Integrate learned terrain difficulty predictor
+7. **Configurable sampling deltas**: Make finite difference step sizes (currently hardcoded at 0.02m and 0.03m) configurable for different heightmap resolutions and terrain scales
+8. **Adaptive fallback costs**: Make fallback cost values (when heightmap queries fail) configurable or derived from other cost parameters

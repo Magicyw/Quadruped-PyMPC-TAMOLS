@@ -25,6 +25,12 @@ Features sampling-based mpc:
 - implements different strategies: [random sampling](https://arxiv.org/pdf/2212.00541.pdf), [mppi](https://sites.gatech.edu/acds/mppi/), or [cemppi](https://arxiv.org/pdf/2203.16633.pdf) 
 - different control parametrizations: zero-order, linear splines or cubic splines (see [mujoco-mpc](https://arxiv.org/pdf/2212.00541.pdf))
 
+Features terrain-aware foothold adaptation:
+- TAMOLS-inspired terrain-aware foothold planner for rough terrain
+- local search with edge avoidance, roughness penalty, and kinematic constraints
+- configurable cost weights and search parameters
+- see [TAMOLS documentation](docs/TAMOLS_FOOTHOLD_ADAPTATION.md) for details
+
 ## Installation and Run
 
 See [here](https://github.com/iit-DLSLab/Quadruped-PyMPC/blob/main/README_install.md).
