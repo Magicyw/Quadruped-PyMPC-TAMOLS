@@ -258,7 +258,31 @@ simulation_params = {
 
     'use_inertia_recomputation':   True,
 
-    'scene':                       'flat',  # flat, random_boxes, random_pyramids, perlin
+    # Scene configuration
+    # Built-in scenes: 'flat', 'random_boxes', 'random_pyramids', 'perlin'
+    # Stepping stones scenes: 'stepping_stones_easy', 'stepping_stones_medium', 
+    #                         'stepping_stones_hard', 'stepping_stones_sparse', 
+    #                         'stepping_stones' (default)
+    # Custom scene: provide full path to XML file (e.g., '/path/to/custom_scene.xml')
+    'scene':                       'flat',
+    
+    # Stepping stones terrain configuration (used when scene is a stepping_stones variant)
+    # Set to None to use pre-generated XML files, or customize parameters here
+    'stepping_stones_params':      None,  # Can be a dict with custom parameters
+    # Example custom parameters:
+    # 'stepping_stones_params': {
+    #     'uphill_length': 3.0,
+    #     'uphill_angle': 15.0,
+    #     'flat1_length': 1.0,
+    #     'stepping_stones_length': 4.0,
+    #     'stone_radius': 0.15,
+    #     'stone_height': 0.05,
+    #     'stone_spacing': 0.4,
+    #     'stones_per_row': 3,
+    #     'flat2_length': 1.0,
+    #     'downhill_length': 3.0,
+    #     'downhill_angle': 15.0,
+    # }
 
     }
 # -----------------------------------------------------------------------

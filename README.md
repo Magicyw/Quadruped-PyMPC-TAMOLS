@@ -30,11 +30,29 @@ Features terrain-aware foothold adaptation:
 - local search with edge avoidance, roughness penalty, and kinematic constraints
 - configurable cost weights and search parameters
 - custom stepping stones terrain for testing (梅花桩地图)
-- see [TAMOLS documentation](docs/TAMOLS_FOOTHOLD_ADAPTATION.md) and [stepping stones terrain](docs/STEPPING_STONES_TERRAIN.md) for details
+- easy integration: just set `scene: 'stepping_stones_medium'` in config.py
+- see [TAMOLS documentation](docs/TAMOLS_FOOTHOLD_ADAPTATION.md), [stepping stones terrain](docs/STEPPING_STONES_TERRAIN.md), and [usage guide](docs/USING_STEPPING_STONES.md) for details
 
 ## Installation and Run
 
 See [here](https://github.com/iit-DLSLab/Quadruped-PyMPC/blob/main/README_install.md).
+
+### Quick Start with Stepping Stones Terrain
+
+```bash
+# 1. Generate terrain files
+cd simulation
+python example_stepping_stones.py
+
+# 2. Edit config.py to use stepping stones
+# Set: simulation_params['scene'] = 'stepping_stones_medium'
+# Set: simulation_params['visual_foothold_adaptation'] = 'tamols'
+
+# 3. Run simulation
+python simulation.py
+```
+
+See [usage guide](docs/USING_STEPPING_STONES.md) for detailed configuration.
 
 ## Citing this work
 
