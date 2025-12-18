@@ -201,7 +201,33 @@ simulation_params = {
     'step_height':                 0.2 * hip_height,  
 
     # Visual Foothold adapatation
-    "visual_foothold_adaptation":  'blind', #'blind', 'height', 'vfa'
+    "visual_foothold_adaptation":  'blind', #'blind', 'height', 'vfa', 'tamols'
+
+    # TAMOLS-inspired foothold adaptation parameters
+    # These parameters are used when visual_foothold_adaptation is set to 'tamols'
+    'tamols_params': {
+        # Candidate generation parameters
+        'search_radius': 0.15,           # [m] radius around seed foothold to search
+        'search_resolution': 0.03,       # [m] grid step size for candidate sampling
+        'patch_size': 3,                 # number of neighboring heightmap points to sample for gradient estimation
+        
+        # Cost function weights (higher = more penalty)
+        'weight_edge_avoidance': 5.0,    # penalize high gradient/slope (edge risk)
+        'weight_roughness': 2.0,         # penalize terrain roughness/irregularity
+        'weight_deviation': 1.0,         # penalize deviation from seed foothold
+        'weight_kinematic': 10.0,        # penalize candidates outside kinematic reach
+        
+        # Kinematic reachability constraints (robot-specific, in meters)
+        # Distance from hip to foothold must be in [l_min, l_max]
+        'l_min': {'go1': 0.15, 'go2': 0.15, 'aliengo': 0.18, 'b2': 0.25, 
+                  'hyqreal1': 0.25, 'hyqreal2': 0.25, 'mini_cheetah': 0.12, 'spot': 0.20},
+        'l_max': {'go1': 0.45, 'go2': 0.45, 'aliengo': 0.55, 'b2': 0.75, 
+                  'hyqreal1': 0.75, 'hyqreal2': 0.75, 'mini_cheetah': 0.40, 'spot': 0.60},
+        
+        # Foothold constraint box size (for MPC foothold constraints)
+        'constraint_box_dx': 0.05,       # [m] +/- x constraint around chosen foothold
+        'constraint_box_dy': 0.05,       # [m] +/- y constraint around chosen foothold
+    },
 
     # this is the integration time used in the simulator
     'dt':                          0.002,
