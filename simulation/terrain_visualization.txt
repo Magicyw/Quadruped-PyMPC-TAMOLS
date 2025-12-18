@@ -1,0 +1,76 @@
+═══════════════════════════════════════════════════════════════════
+梅花桩地图 (Stepping Stones Terrain) - Side View
+═══════════════════════════════════════════════════════════════════
+
+                Flat1  Stepping Stones   Flat2
+                 ___    • • • • •        ___
+                /   |   • • • • •       |   \
+               /    |   • • • • •       |    \
+         Uphill|    |   • • • • •       |     |Downhill
+    Start →   /     |__ • • • • • ______|     \ → End
+             /                                  \
+    ________/                                    \________
+    Ground                                         Ground
+
+═══════════════════════════════════════════════════════════════════
+Top View - Plum Blossom Pattern (梅花桩布局)
+═══════════════════════════════════════════════════════════════════
+
+    Forward Direction (X) →
+    
+    Row 1:      •         •         •
+    Row 2:         •         •         •    (Offset)
+    Row 3:      •         •         •
+    Row 4:         •         •         •    (Offset)
+    Row 5:      •         •         •
+    Row 6:         •         •         •    (Offset)
+    Row 7:      •         •         •
+    Row 8:         •         •         •    (Offset)
+    Row 9:      •         •         •
+
+    ← Left (Y)  |  Center  | Right (Y) →
+
+═══════════════════════════════════════════════════════════════════
+Generated Terrains (已生成的地图)
+═══════════════════════════════════════════════════════════════════
+
+1. stepping_stones_easy.xml       - 初级难度 (Easy)
+   • Larger stones (0.20m radius)
+   • Closer spacing (0.35m)
+   • Gentler slopes (10°)
+
+2. stepping_stones_medium.xml     - 中级难度 (Medium) [Default]
+   • Medium stones (0.15m radius)
+   • Medium spacing (0.40m)
+   • Medium slopes (15°)
+
+3. stepping_stones_hard.xml       - 高级难度 (Hard)
+   • Smaller stones (0.12m radius)
+   • Wider spacing (0.50m)
+   • Steeper slopes (20°)
+
+4. stepping_stones_sparse.xml     - 稀疏布局 (Sparse)
+   • Only 2 stones per row
+   • Wide spacing (0.55m)
+
+5. stepping_stones_terrain.xml    - 标准地图 (Standard)
+   • Default parameters
+
+═══════════════════════════════════════════════════════════════════
+Usage Instructions (使用说明)
+═══════════════════════════════════════════════════════════════════
+
+1. Generate terrains:
+   python simulation/example_stepping_stones.py
+
+2. To use in simulation (if gym_quadruped supports custom XML):
+   - Copy one of the generated XML files to appropriate location
+   - Or modify QuadrupedEnv to load custom scene XML
+   
+3. Configure TAMOLS for stepping stones:
+   In config.py:
+   simulation_params['visual_foothold_adaptation'] = 'tamols'
+   simulation_params['tamols_params']['search_radius'] = 0.20
+   simulation_params['tamols_params']['weight_edge_avoidance'] = 8.0
+
+═══════════════════════════════════════════════════════════════════
