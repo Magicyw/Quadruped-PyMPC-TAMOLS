@@ -24,6 +24,7 @@ def generate_standard_terrains():
     print("\n1. Easy Terrain (初级难度)")
     print("-" * 70)
     easy_params = {
+        'flat_start_length': 2.0,  # Flat area for robot spawn
         'uphill_length': 2.5,
         'uphill_angle': 10.0,
         'flat1_length': 1.0,
@@ -46,6 +47,7 @@ def generate_standard_terrains():
     print("\n2. Medium Terrain (中级难度)")
     print("-" * 70)
     medium_params = {
+        'flat_start_length': 2.0,  # Flat area for robot spawn
         'uphill_length': 3.0,
         'uphill_angle': 15.0,
         'flat1_length': 1.0,
@@ -68,6 +70,7 @@ def generate_standard_terrains():
     print("\n3. Hard Terrain (高级难度)")
     print("-" * 70)
     hard_params = {
+        'flat_start_length': 2.0,  # Flat area for robot spawn
         'uphill_length': 3.5,
         'uphill_angle': 20.0,
         'flat1_length': 0.8,
@@ -90,6 +93,7 @@ def generate_standard_terrains():
     print("\n4. Sparse Terrain (稀疏布局)")
     print("-" * 70)
     sparse_params = {
+        'flat_start_length': 2.0,  # Flat area for robot spawn
         'uphill_length': 3.0,
         'uphill_angle': 15.0,
         'flat1_length': 1.0,

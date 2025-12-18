@@ -163,6 +163,7 @@ simulation_params = {
     
     # Custom terrain parameters (自定义地形参数)
     'stepping_stones_params': {
+        'flat_start_length': 2.0,    # Flat starting area (起始平地长度)
         'uphill_length': 2.5,        # Length of uphill (上坡长度)
         'uphill_angle': 12.0,        # Uphill angle in degrees (上坡角度)
         'flat1_length': 0.8,         # First flat section (第一段平地)
@@ -285,6 +286,7 @@ This will regenerate all terrain files.
 
 When the robot successfully uses stepping stones terrain with TAMOLS:
 
+0. **Flat Starting Area (起始平地)**: Robot spawns at origin (0, 0, 0) on flat ground, initializes and stabilizes
 1. **Uphill Section (上坡)**: Robot maintains steady trot gait, adapts to slope
 2. **Stepping Stones (梅花桩)**: 
    - Robot selects stone centers as footholds

@@ -6,12 +6,18 @@ This is a custom terrain designed to test the TAMOLS foothold planner on challen
 
 ## Terrain Structure
 
-The terrain consists of five sequential sections:
+The terrain consists of six sequential sections:
 
 ```
-[Uphill] → [Flat 1] → [Stepping Stones] → [Flat 2] → [Downhill]
-   ↗          —           • • •            —             ↘
+[Flat Start] → [Uphill] → [Flat 1] → [Stepping Stones] → [Flat 2] → [Downhill]
+      —           ↗          —           • • •            —             ↘
+   (spawn)
 ```
+
+### 0. Flat Starting Area (起始平地) 
+- **Length**: 2.0 m (default)
+- **Purpose**: Safe spawn area for robot at origin (0, 0, 0)
+- **Note**: Robot spawns here and moves forward toward the uphill
 
 ### 1. Uphill Slope (上坡)
 - **Length**: 3.0 m (default)
@@ -31,11 +37,11 @@ The terrain consists of five sequential sections:
 - **Pattern**: Alternating offset rows (plum blossom pattern)
 - **Purpose**: Main challenge - requires precise foothold placement
 
-### 4. Second Flat Section (平地)
+### 5. Second Flat Section (平地)
 - **Length**: 1.0 m (default)
 - **Purpose**: Recovery zone after stepping stones
 
-### 5. Downhill Slope (下坡)
+### 6. Downhill Slope (下坡)
 - **Length**: 3.0 m (default)
 - **Angle**: 15° (default)
 - **Purpose**: Tests downhill locomotion
@@ -96,6 +102,7 @@ from simulation.stepping_stones_scene import save_stepping_stones_scene
 # Create easier terrain (larger stones, closer spacing)
 save_stepping_stones_scene(
     filename="easy_stones.xml",
+    flat_start_length=2.0,  # Flat starting area for robot spawn
     stone_radius=0.20,      # Larger stones
     stone_spacing=0.35,     # Closer spacing
     stone_height=0.03,      # Lower height
@@ -106,6 +113,7 @@ save_stepping_stones_scene(
 # Create harder terrain (smaller stones, wider spacing)
 save_stepping_stones_scene(
     filename="hard_stones.xml",
+    flat_start_length=2.0,  # Flat starting area for robot spawn
     stone_radius=0.12,      # Smaller stones
     stone_spacing=0.50,     # Wider spacing
     stone_height=0.08,      # Higher height
@@ -146,6 +154,10 @@ The default parameters are tuned for:
 This terrain is ideal for evaluating TAMOLS foothold adaptation:
 
 ### Expected Behaviors
+
+0. **Flat Starting Area**:
+   - Robot spawns here at origin (0, 0, 0)
+   - Initializes and stabilizes before moving forward
 
 1. **Uphill Section**: 
    - TAMOLS should maintain steady gait

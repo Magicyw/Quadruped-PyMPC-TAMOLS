@@ -8,49 +8,52 @@
   <worldbody>
     <light pos="0 0 3" dir="0 0 -1" directional="true"/>
 
+    <!-- Flat starting area (robot spawn point) -->
+    <geom name="flat_start" type="box" pos="1.0 0 0.0" size="1.0 2.0 0.1" material="grid" friction="1.0 0.005 0.0001"/>
+
     <!-- Uphill slope -->
-    <geom name="uphill" type="box" pos="1.23100969126526 0 0.2170602220836629" size="1.25 2.0 0.1" euler="0 10.0 0" material="grid" friction="1.0 0.005 0.0001"/>
+    <geom name="uphill" type="box" pos="3.23100969126526 0 0.2170602220836629" size="1.25 2.0 0.1" euler="0 10.0 0" material="grid" friction="1.0 0.005 0.0001"/>
 
     <!-- First flat section -->
-    <geom name="flat1" type="box" pos="2.96201938253052 0 0.44081745177116244" size="0.5 2.0 0.1" material="grid" friction="1.0 0.005 0.0001"/>
+    <geom name="flat1" type="box" pos="4.96201938253052 0 0.44081745177116244" size="0.5 2.0 0.1" material="grid" friction="1.0 0.005 0.0001"/>
 
     <!-- Stepping stones section -->
-    <geom name="stone_0" type="cylinder" pos="3.81201938253052 -0.35 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_1" type="cylinder" pos="3.81201938253052 0.0 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_2" type="cylinder" pos="3.81201938253052 0.35 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_3" type="cylinder" pos="4.16201938253052 -0.26249999999999996 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_4" type="cylinder" pos="4.16201938253052 0.0875 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_5" type="cylinder" pos="4.16201938253052 0.4375 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_6" type="cylinder" pos="4.51201938253052 -0.35 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_7" type="cylinder" pos="4.51201938253052 0.0 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_8" type="cylinder" pos="4.51201938253052 0.35 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_9" type="cylinder" pos="4.862019382530519 -0.26249999999999996 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_10" type="cylinder" pos="4.862019382530519 0.0875 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_11" type="cylinder" pos="4.862019382530519 0.4375 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_12" type="cylinder" pos="5.212019382530519 -0.35 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_13" type="cylinder" pos="5.212019382530519 0.0 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_14" type="cylinder" pos="5.212019382530519 0.35 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_15" type="cylinder" pos="5.562019382530519 -0.26249999999999996 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_16" type="cylinder" pos="5.562019382530519 0.0875 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_17" type="cylinder" pos="5.562019382530519 0.4375 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_18" type="cylinder" pos="5.912019382530518 -0.35 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_19" type="cylinder" pos="5.912019382530518 0.0 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_20" type="cylinder" pos="5.912019382530518 0.35 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_21" type="cylinder" pos="6.262019382530518 -0.26249999999999996 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_22" type="cylinder" pos="6.262019382530518 0.0875 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_23" type="cylinder" pos="6.262019382530518 0.4375 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_24" type="cylinder" pos="6.612019382530518 -0.35 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_25" type="cylinder" pos="6.612019382530518 0.0 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_26" type="cylinder" pos="6.612019382530518 0.35 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_27" type="cylinder" pos="6.962019382530517 -0.26249999999999996 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_28" type="cylinder" pos="6.962019382530517 0.0875 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
-    <geom name="stone_29" type="cylinder" pos="6.962019382530517 0.4375 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_0" type="cylinder" pos="5.8120193825305195 -0.35 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_1" type="cylinder" pos="5.8120193825305195 0.0 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_2" type="cylinder" pos="5.8120193825305195 0.35 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_3" type="cylinder" pos="6.162019382530519 -0.26249999999999996 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_4" type="cylinder" pos="6.162019382530519 0.0875 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_5" type="cylinder" pos="6.162019382530519 0.4375 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_6" type="cylinder" pos="6.512019382530519 -0.35 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_7" type="cylinder" pos="6.512019382530519 0.0 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_8" type="cylinder" pos="6.512019382530519 0.35 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_9" type="cylinder" pos="6.8620193825305185 -0.26249999999999996 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_10" type="cylinder" pos="6.8620193825305185 0.0875 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_11" type="cylinder" pos="6.8620193825305185 0.4375 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_12" type="cylinder" pos="7.212019382530518 -0.35 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_13" type="cylinder" pos="7.212019382530518 0.0 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_14" type="cylinder" pos="7.212019382530518 0.35 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_15" type="cylinder" pos="7.562019382530518 -0.26249999999999996 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_16" type="cylinder" pos="7.562019382530518 0.0875 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_17" type="cylinder" pos="7.562019382530518 0.4375 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_18" type="cylinder" pos="7.912019382530517 -0.35 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_19" type="cylinder" pos="7.912019382530517 0.0 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_20" type="cylinder" pos="7.912019382530517 0.35 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_21" type="cylinder" pos="8.262019382530518 -0.26249999999999996 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_22" type="cylinder" pos="8.262019382530518 0.0875 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_23" type="cylinder" pos="8.262019382530518 0.4375 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_24" type="cylinder" pos="8.612019382530518 -0.35 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_25" type="cylinder" pos="8.612019382530518 0.0 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_26" type="cylinder" pos="8.612019382530518 0.35 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_27" type="cylinder" pos="8.962019382530517 -0.26249999999999996 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_28" type="cylinder" pos="8.962019382530517 0.0875 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
+    <geom name="stone_29" type="cylinder" pos="8.962019382530517 0.4375 0.4708174517711624" size="0.2 0.015" material="stone" friction="1.0 0.005 0.0001"/>
 
     <!-- Second flat section -->
-    <geom name="flat2" type="box" pos="7.46201938253052 0 0.44081745177116244" size="0.5 2.0 0.1" material="grid" friction="1.0 0.005 0.0001"/>
+    <geom name="flat2" type="box" pos="9.46201938253052 0 0.44081745177116244" size="0.5 2.0 0.1" material="grid" friction="1.0 0.005 0.0001"/>
 
     <!-- Downhill slope -->
-    <geom name="downhill" type="box" pos="9.19302907379578 0 0.22375722968749953" size="1.25 2.0 0.1" euler="0 -10.0 0" material="grid" friction="1.0 0.005 0.0001"/>
+    <geom name="downhill" type="box" pos="11.193029073795781 0 0.22375722968749953" size="1.25 2.0 0.1" euler="0 -10.0 0" material="grid" friction="1.0 0.005 0.0001"/>
 
     <!-- Safety ground plane -->
     <geom name="ground" type="plane" pos="0 0 -1.0" size="50 50 0.1" material="grid" friction="1.0 0.005 0.0001"/>

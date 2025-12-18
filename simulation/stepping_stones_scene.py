@@ -17,6 +17,7 @@ import numpy as np
 
 
 def create_stepping_stones_scene(
+    flat_start_length=2.0,  # Flat starting area for robot spawn
     uphill_length=3.0,
     uphill_angle=15.0,  # degrees
     flat1_length=1.0,
@@ -33,6 +34,7 @@ def create_stepping_stones_scene(
     """Generate MuJoCo XML for stepping stones terrain.
 
     Args:
+        flat_start_length: Length of flat starting area where robot spawns (m)
         uphill_length: Length of uphill slope (m)
         uphill_angle: Angle of uphill slope (degrees)
         flat1_length: Length of first flat section (m)
@@ -58,8 +60,11 @@ def create_stepping_stones_scene(
     downhill_height = downhill_length * np.tan(downhill_rad)
 
     # Calculate positions along x-axis
+    # Robot spawns at origin (0, 0, 0), so we need a flat starting area
     x_start = 0.0
-    x_uphill_end = x_start + uphill_length * np.cos(uphill_rad)
+    x_flat_start_end = x_start + flat_start_length
+    x_uphill_start = x_flat_start_end
+    x_uphill_end = x_uphill_start + uphill_length * np.cos(uphill_rad)
     x_flat1_end = x_uphill_end + flat1_length
     x_stones_end = x_flat1_end + stepping_stones_length
     x_flat2_end = x_stones_end + flat2_length
@@ -83,8 +88,20 @@ def create_stepping_stones_scene(
     xml_parts.append('    <light pos="0 0 3" dir="0 0 -1" directional="true"/>')
     xml_parts.append("")
 
+    # 0. Flat starting area (where robot spawns)
+    flat_start_x_center = x_start + flat_start_length / 2
+    flat_start_z_center = z_ground
+    xml_parts.append('    <!-- Flat starting area (robot spawn point) -->')
+    xml_parts.append(
+        f'    <geom name="flat_start" type="box" '
+        f'pos="{flat_start_x_center} 0 {flat_start_z_center}" '
+        f'size="{flat_start_length/2} 2.0 0.1" '
+        f'material="grid" friction="{ground_friction} 0.005 0.0001"/>'
+    )
+    xml_parts.append("")
+
     # 1. Uphill slope
-    uphill_x_center = x_start + uphill_length * np.cos(uphill_rad) / 2
+    uphill_x_center = x_uphill_start + uphill_length * np.cos(uphill_rad) / 2
     uphill_z_center = z_ground + uphill_length * np.sin(uphill_rad) / 2
     xml_parts.append('    <!-- Uphill slope -->')
     xml_parts.append(
