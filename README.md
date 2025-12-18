@@ -40,9 +40,9 @@ See [here](https://github.com/iit-DLSLab/Quadruped-PyMPC/blob/main/README_instal
 ### Quick Start with Stepping Stones Terrain
 
 ```bash
-# 1. Generate terrain files
+# 1. Install stepping stones terrain (one-time setup)
 cd simulation
-python example_stepping_stones.py
+python install_stepping_stones.py
 
 # 2. Edit config.py to use stepping stones
 # Set: simulation_params['scene'] = 'stepping_stones_medium'
@@ -52,7 +52,9 @@ python example_stepping_stones.py
 python simulation.py
 ```
 
-See [usage guide](docs/USING_STEPPING_STONES.md) for detailed configuration.
+**Important**: The installer copies terrain files to gym_quadruped's scene directory. This only needs to be done once.
+
+See [usage guide](docs/USING_STEPPING_STONES.md) for detailed configuration and troubleshooting.
 
 ## Citing this work
 

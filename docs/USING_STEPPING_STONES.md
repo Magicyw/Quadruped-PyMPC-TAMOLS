@@ -2,21 +2,45 @@
 
 ## Quick Start (快速开始)
 
-### 1. Generate Terrain Files (生成地图文件)
+### 1. Generate and Install Terrain Files (生成并安装地图文件)
 
-First, generate the stepping stones terrain XML files:
+**IMPORTANT**: The stepping stones terrain files must be installed to gym_quadruped's scene directory.
+
+**Method 1: Automatic Installation (推荐方法 - Recommended)**
 
 ```bash
 cd simulation
-python example_stepping_stones.py
+python install_stepping_stones.py
 ```
 
-This creates 5 terrain files:
-- `stepping_stones_easy.xml` - 初级难度
-- `stepping_stones_medium.xml` - 中级难度  
-- `stepping_stones_hard.xml` - 高级难度
-- `stepping_stones_sparse.xml` - 稀疏布局
-- `stepping_stones_terrain.xml` - 默认地图
+This will:
+1. Generate the terrain XML files if needed (如果需要会生成地图文件)
+2. Copy them to gym_quadruped's scene directory (复制到gym_quadruped的场景目录)
+
+**Method 2: Manual Steps (手动步骤)**
+
+```bash
+# Step 1: Generate terrain files (生成地图文件)
+cd simulation
+python example_stepping_stones.py
+
+# Step 2: Install to gym_quadruped (安装到gym_quadruped)
+python install_stepping_stones.py
+```
+
+**Method 3: Python Script (Python脚本)**
+
+```python
+from simulation.scene_loader import install_stepping_stones_to_gym_quadruped
+install_stepping_stones_to_gym_quadruped()
+```
+
+After installation, you'll have 5 terrain files available:
+- `stepping_stones_easy` - 初级难度 (Easy)
+- `stepping_stones_medium` - 中级难度 (Medium)
+- `stepping_stones_hard` - 高级难度 (Hard)
+- `stepping_stones_sparse` - 稀疏布局 (Sparse)
+- `stepping_stones` - 默认地图 (Default)
 
 ### 2. Configure Your Simulation (配置仿真)
 
@@ -27,6 +51,7 @@ simulation_params = {
     # ... other parameters ...
     
     # Select stepping stones terrain (选择梅花桩地图)
+    # Note: Use scene name without .xml extension
     'scene': 'stepping_stones_medium',  # or 'stepping_stones_easy', 'stepping_stones_hard', etc.
     
     # Enable TAMOLS for terrain-aware foothold planning (启用TAMOLS地形感知)
@@ -199,6 +224,31 @@ simulation_params = {
 
 ## Troubleshooting (故障排除)
 
+### Problem: FileNotFoundError - Stepping stones terrain not installed (地形未安装错误)
+**Error message**: `ERROR: Stepping stones terrain not installed in gym_quadruped`
+
+**Solution (解决方法):**
+```bash
+cd simulation
+python install_stepping_stones.py
+```
+
+This happens because gym_quadruped expects scene files to be in its own directory. The installer copies the terrain files to the correct location.
+
+### Problem: Scene file not found in gym_quadruped directory (在gym_quadruped目录找不到场景文件)
+**Error shows path like**: `/path/to/gym_quadruped/scene/xml/stepping_stones_*.xml`
+
+**Solution:**
+1. Run the installer:
+   ```bash
+   cd simulation
+   python install_stepping_stones.py
+   ```
+2. Or manually copy files:
+   ```bash
+   cp simulation/stepping_stones_*.xml /path/to/gym_quadruped/scene/xml/
+   ```
+
 ### Problem: Robot falls through gaps (机器人掉进缝隙)
 **Solution:**
 1. Start with `'stepping_stones_easy'` terrain
@@ -217,7 +267,7 @@ simulation_params = {
 2. Increase `weight_edge_avoidance` to 10.0
 3. Increase `weight_roughness` to 4.0
 
-### Problem: Terrain files not found (找不到地形文件)
+### Problem: Terrain files not found in simulation directory (仿真目录中找不到地形文件)
 **Solution:**
 ```bash
 cd simulation
