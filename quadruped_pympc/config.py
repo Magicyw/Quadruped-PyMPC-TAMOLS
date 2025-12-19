@@ -212,13 +212,16 @@ simulation_params = {
         'patch_size': 3,                 # number of neighboring heightmap points to sample for gradient estimation
         
         # Cost function weights (higher = more penalty)
-        'weight_edge_avoidance': 5.0,    # penalize high gradient/slope (edge risk)
-        'weight_roughness': 2.0,         # penalize terrain roughness/irregularity
-        'weight_deviation': 1.0,         # penalize deviation from seed foothold
-        'weight_kinematic': 10.0,        # penalize candidates outside kinematic reach
-        'weight_forward_progress': 3.0,  # penalize lack of forward motion (prevents standing still)
-        'weight_velocity_alignment': 2.0, # encourage footholds aligned with velocity (GIA principle)
-        'weight_step_consistency': 1.5,  # maintain consistent step patterns across legs (GIA principle)
+        # Aligned with TAMOLS reference implementation (ianpedroza/tamols-rl)
+        'weight_edge_avoidance': 5.0,         # from tamols/costs.py:add_edge_avoidance_cost
+        'weight_roughness': 2.0,              # terrain roughness/irregularity  
+        'weight_previous_solution': 0.01,     # from tamols/costs.py:add_previous_solution_cost (deviation from seed)
+        'weight_kinematic': 10.0,             # from tamols/constraints.py:add_kinematic_constraints
+        'weight_nominal_kinematic': 20.0,     # from tamols/costs.py:add_nominal_kinematic_cost (GIA: maintains hip height)
+        'weight_reference_tracking': 2.0,     # from tamols/costs.py:add_tracking_cost (GIA: tracks velocity, prevents standing still)
+        
+        # Nominal kinematic parameters
+        'h_des': 0.25,                        # [m] desired hip height for nominal kinematics (go1/go2: 0.25, aliengo: 0.30)
         
         # Kinematic reachability constraints (robot-specific, in meters)
         # Distance from hip to foothold must be in [l_min, l_max]

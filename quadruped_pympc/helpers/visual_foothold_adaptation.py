@@ -208,14 +208,13 @@ class VisualFootholdAdaptation:
     def _compute_tamols_score(self, candidate, seed, hip_position, heightmap, leg_name, all_footholds):
         """Compute TAMOLS-inspired cost for a candidate foothold.
 
-        Combines multiple cost terms inspired by TAMOLS:
-        - Edge avoidance: penalizes high terrain gradients (edge risk)
-        - Roughness: penalizes irregular terrain
-        - Previous solution tracking: penalizes deviation from seed
-        - Kinematic reachability: penalizes or rejects candidates outside leg reach
-        - Forward progress: penalizes candidates that don't contribute to forward motion (anti-conservative)
-        - Velocity alignment: encourages footholds aligned with velocity direction (GIA principle)
-        - Step consistency: maintains consistent step patterns across legs (GIA principle)
+        Combines multiple cost terms inspired by TAMOLS reference (ianpedroza/tamols-rl):
+        - Edge avoidance: penalizes high terrain gradients (from tamols/costs.py:add_edge_avoidance_cost)
+        - Roughness: penalizes irregular terrain  
+        - Previous solution tracking: penalizes deviation from seed (from tamols/costs.py:add_previous_solution_cost)
+        - Kinematic reachability: enforces distance bounds (from tamols/constraints.py:add_kinematic_constraints)
+        - Nominal kinematics: maintains desired hip height and leg configuration (from tamols/costs.py:add_nominal_kinematic_cost)
+        - Reference tracking: tracks desired velocity direction (from tamols/costs.py:add_tracking_cost)
 
         Args:
             candidate: np.ndarray [x, y, z] candidate foothold in world frame
@@ -231,13 +230,14 @@ class VisualFootholdAdaptation:
         # Load cost weights
         w_edge = self.tamols_params.get('weight_edge_avoidance', 5.0)
         w_rough = self.tamols_params.get('weight_roughness', 2.0)
-        w_dev = self.tamols_params.get('weight_deviation', 1.0)
+        w_prev_sol = self.tamols_params.get('weight_previous_solution', 0.01)
         w_kin = self.tamols_params.get('weight_kinematic', 10.0)
-        w_forward = self.tamols_params.get('weight_forward_progress', 3.0)
-        w_vel_align = self.tamols_params.get('weight_velocity_alignment', 2.0)
-        w_step_consist = self.tamols_params.get('weight_step_consistency', 1.5)
+        w_nominal_kin = self.tamols_params.get('weight_nominal_kinematic', 20.0)
+        w_tracking = self.tamols_params.get('weight_reference_tracking', 2.0)
 
         # 1. Kinematic reachability cost
+        # From TAMOLS: constraints.py:add_kinematic_constraints (lines 130-154)
+        # Enforces l_min <= ||hip - foot|| <= l_max
         hip_to_foot = candidate - hip_position
         distance = np.linalg.norm(hip_to_foot)
         l_min = self.tamols_params.get('l_min', {}).get(self.robot_name, 0.15)
@@ -252,33 +252,37 @@ class VisualFootholdAdaptation:
             kinematic_cost = 0.0
 
         # 2. Edge avoidance cost (gradient magnitude)
+        # From TAMOLS: costs.py:add_edge_avoidance_cost (lines 164-185)
+        # Uses gradient magnitudes from heightmap
         edge_cost = self._compute_edge_cost(candidate, heightmap) * w_edge
 
         # 3. Roughness cost (local height variance)
         roughness_cost = self._compute_roughness_cost(candidate, heightmap) * w_rough
 
-        # 4. Previous solution tracking (deviation from seed)
-        deviation = np.linalg.norm(candidate[:2] - seed[:2])
-        deviation_cost = deviation * w_dev
+        # 4. Previous solution tracking
+        # From TAMOLS: costs.py:add_previous_solution_cost (lines 187-215)
+        # Penalizes deviation from previous/seed footholds
+        deviation_squared = np.sum((candidate - seed) ** 2)
+        previous_solution_cost = w_prev_sol * deviation_squared
 
-        # 5. Forward progress cost (NEW - anti-conservative)
-        # Penalize footholds that move backward relative to hip
-        forward_progress_cost = self._compute_forward_progress_cost(candidate, hip_position) * w_forward
+        # 5. Nominal kinematic cost
+        # From TAMOLS: costs.py:add_nominal_kinematic_cost (lines 101-130)
+        # Encourages footholds that maintain desired hip height (h_des)
+        nominal_kinematic_cost = self._compute_nominal_kinematic_cost(
+            candidate, hip_position
+        ) * w_nominal_kin
 
-        # 6. Velocity alignment cost (NEW - GIA principle)
-        # Encourage footholds aligned with robot's velocity direction
-        velocity_alignment_cost = self._compute_velocity_alignment_cost(candidate, seed) * w_vel_align
-
-        # 7. Step consistency cost (NEW - GIA principle)
-        # Maintain consistent step lengths across legs for stable gait
-        step_consistency_cost = self._compute_step_consistency_cost(
-            candidate, hip_position, leg_name, all_footholds
-        ) * w_step_consist
+        # 6. Reference tracking cost
+        # From TAMOLS: costs.py:add_tracking_cost (lines 13-34)
+        # Tracks reference velocity direction (only X direction in TAMOLS)
+        reference_tracking_cost = self._compute_reference_tracking_cost(
+            candidate, seed
+        ) * w_tracking
 
         # Total cost combines all terms
         total_cost = (
-            kinematic_cost + edge_cost + roughness_cost + deviation_cost +
-            forward_progress_cost + velocity_alignment_cost + step_consistency_cost
+            kinematic_cost + edge_cost + roughness_cost + previous_solution_cost +
+            nominal_kinematic_cost + reference_tracking_cost
         )
 
         return total_cost
@@ -352,136 +356,96 @@ class VisualFootholdAdaptation:
 
         return roughness
 
-    def _compute_forward_progress_cost(self, candidate, hip_position):
-        """Penalize footholds that don't contribute to forward motion.
+    def _compute_nominal_kinematic_cost(self, candidate, hip_position):
+        """Cost for nominal kinematics - maintains desired hip height.
 
-        This prevents the robot from being overly conservative and standing still.
-        Encourages footholds that are forward of the hip in the direction of motion.
+        From TAMOLS costs.py:add_nominal_kinematic_cost (lines 101-130).
+        Encourages footholds that maintain the robot at its desired hip height
+        with legs in nominal positions. This is key to GIA as it maintains
+        consistent kinematic configuration independent of gait phase.
 
         Args:
             candidate: np.ndarray [x, y, z] candidate foothold in world frame
             hip_position: np.ndarray [x, y, z] hip position in world frame
 
         Returns:
-            float: forward progress cost (lower is better)
+            float: nominal kinematic cost (lower is better)
         """
-        # Vector from hip to candidate foothold
-        hip_to_foot = candidate - hip_position
-
-        # Get forward velocity direction (if available)
-        if hasattr(self, 'forward_vel') and self.forward_vel is not None:
-            vel_magnitude = np.linalg.norm(self.forward_vel[:2])
-            if vel_magnitude > 0.01:  # Only apply if moving
-                # Normalize velocity direction
-                vel_direction = self.forward_vel[:2] / vel_magnitude
-                
-                # Project foothold displacement onto velocity direction
-                forward_displacement = np.dot(hip_to_foot[:2], vel_direction)
-                
-                # Penalize backward steps (negative displacement)
-                # Also penalize very small forward steps (overly conservative)
-                min_forward_step = 0.05  # Minimum expected forward step [m]
-                if forward_displacement < min_forward_step:
-                    # Quadratic penalty for insufficient forward progress
-                    cost = (min_forward_step - forward_displacement) ** 2
-                else:
-                    cost = 0.0
-                
-                return cost
+        # Desired leg vector in body frame: [0, 0, -h_des]
+        # In TAMOLS, h_des is the desired hip height (default 0.25m for go2)
+        h_des = self.tamols_params.get('h_des', 0.25)
+        l_des = np.array([0.0, 0.0, -h_des])
         
-        # Fallback: if no velocity info, assume forward is +X direction
-        forward_displacement = hip_to_foot[0]
-        min_forward_step = 0.03
-        if forward_displacement < min_forward_step:
-            cost = (min_forward_step - forward_displacement) ** 2
-        else:
-            cost = 0.0
+        # In TAMOLS: cost = ||base + R_B * hip_offset - l_des - p_i||^2
+        # Simplified version (no rotation): base at desired position relative to foot
+        # base_minus_leg = hip_position - l_des
+        # cost = ||(base_minus_leg) - candidate||^2
+        
+        # Desired base position if foot is at candidate
+        desired_base_from_foot = candidate - l_des
+        
+        # Actual hip position
+        # Cost penalizes deviation from nominal configuration
+        diff = hip_position - desired_base_from_foot
+        cost = np.dot(diff, diff)
         
         return cost
 
-    def _compute_velocity_alignment_cost(self, candidate, seed):
-        """Encourage footholds aligned with robot's velocity direction.
+    def _compute_reference_tracking_cost(self, candidate, seed):
+        """Cost to track reference velocity direction.
 
-        This supports GIA (Gait Independent Adaptation) by selecting footholds
-        that naturally align with the direction of motion, regardless of specific gait timing.
+        From TAMOLS costs.py:add_tracking_cost (lines 13-34).
+        In TAMOLS, this tracks desired velocity (only X direction).
+        Adapted for foothold selection: encourages footholds that support
+        forward motion in the reference direction, preventing conservative behavior.
 
         Args:
             candidate: np.ndarray [x, y, z] candidate foothold in world frame
             seed: np.ndarray [x, y, z] seed/reference foothold in world frame
 
         Returns:
-            float: velocity alignment cost (lower is better)
+            float: reference tracking cost (lower is better)
         """
         if not hasattr(self, 'forward_vel') or self.forward_vel is None:
+            # No velocity info, penalize backward displacement relative to seed
+            displacement = candidate[0] - seed[0]  # X direction only, like TAMOLS
+            if displacement < 0:
+                # Backward step, high cost
+                return displacement ** 2
             return 0.0
         
-        vel_magnitude = np.linalg.norm(self.forward_vel[:2])
-        if vel_magnitude < 0.01:  # Robot nearly stationary
+        # Get reference velocity
+        ref_vel = self.forward_vel[:2]  # XY plane
+        vel_magnitude = np.linalg.norm(ref_vel)
+        
+        if vel_magnitude < 0.01:
+            # Nearly stationary, no tracking cost
             return 0.0
         
-        # Normalize velocity direction
-        vel_direction = self.forward_vel[:2] / vel_magnitude
-        
-        # Displacement from seed to candidate
+        # In TAMOLS: cost = (vel - ref_vel)^2, but we don't have foothold velocity
+        # Instead, we check if foothold supports the desired motion direction
+        # Foothold displacement should align with velocity
         displacement = candidate[:2] - seed[:2]
-        displacement_magnitude = np.linalg.norm(displacement)
         
-        if displacement_magnitude < 0.001:  # Candidate same as seed
-            return 0.0
+        # Project displacement onto velocity direction (like TAMOLS tracking in X only)
+        # We focus on X direction for consistency with TAMOLS
+        vel_x = ref_vel[0]
+        displacement_x = displacement[0]
         
-        # Normalize displacement
-        displacement_direction = displacement / displacement_magnitude
+        # Cost: penalize if foothold doesn't support forward velocity
+        # Similar to TAMOLS: (actual - desired)^2
+        # If vel_x > 0 (forward), we want displacement_x > 0
+        # Cost = (displacement_x - desired_displacement)^2
         
-        # Compute alignment: 1 = perfectly aligned, -1 = opposite direction
-        alignment = np.dot(displacement_direction, vel_direction)
-        
-        # Cost is higher when misaligned (alignment < 1)
-        # Use (1 - alignment) so perfect alignment gives 0 cost
-        # Multiply by displacement magnitude to penalize larger misaligned steps more
-        cost = (1.0 - alignment) * displacement_magnitude
+        # Simple version: penalize if displacement opposes velocity
+        if vel_x > 0 and displacement_x < 0:
+            # Moving forward but foothold goes backward
+            cost = displacement_x ** 2
+        elif vel_x < 0 and displacement_x > 0:
+            # Moving backward but foothold goes forward
+            cost = displacement_x ** 2
+        else:
+            # Displacement aligns with velocity, minimal cost
+            cost = 0.0
         
         return cost
-
-    def _compute_step_consistency_cost(self, candidate, hip_position, leg_name, all_footholds):
-        """Maintain consistent step patterns across legs.
-
-        This supports GIA by encouraging similar step lengths across all legs,
-        which helps maintain stable periodic gaits independent of specific timing.
-
-        Args:
-            candidate: np.ndarray [x, y, z] candidate foothold in world frame
-            hip_position: np.ndarray [x, y, z] hip position in world frame
-            leg_name: str name of current leg
-            all_footholds: LegsAttr object with footholds for all legs
-
-        Returns:
-            float: step consistency cost (lower is better)
-        """
-        # Compute step length for candidate (hip to foothold distance in XY plane)
-        hip_to_candidate = candidate[:2] - hip_position[:2]
-        candidate_step_length = np.linalg.norm(hip_to_candidate)
-        
-        # Get step lengths of other legs (those that have been updated)
-        other_step_lengths = []
-        leg_names = ['FL', 'FR', 'RL', 'RR']
-        
-        for other_leg in leg_names:
-            if other_leg != leg_name and all_footholds[other_leg] is not None:
-                # We don't have hip positions for other legs here, so we'll use
-                # the foothold positions as a proxy for step distance consistency
-                other_foothold = all_footholds[other_leg]
-                if other_foothold is not None:
-                    # Distance between current candidate and other leg's foothold
-                    distance_to_other = np.linalg.norm(candidate[:2] - other_foothold[:2])
-                    other_step_lengths.append(distance_to_other)
-        
-        if len(other_step_lengths) == 0:
-            # First leg being adapted, no consistency cost yet
-            return 0.0
-        
-        # Compute variance of step lengths (including candidate)
-        # Lower variance = more consistent = better for GIA
-        all_step_lengths = other_step_lengths + [candidate_step_length]
-        step_length_variance = np.var(all_step_lengths)
-        
-        return step_length_variance

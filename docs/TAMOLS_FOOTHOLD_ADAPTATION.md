@@ -15,45 +15,47 @@ The TAMOLS strategy performs a local search around each leg's seed foothold posi
 
 ### 2. Cost Metrics
 
-The total cost for each candidate combines seven TAMOLS-inspired metrics:
+The total cost for each candidate combines six TAMOLS-inspired metrics based on the reference implementation (`ianpedroza/tamols-rl`):
 
 #### Edge Avoidance
 - **Purpose**: Avoid placing footholds near edges, steps, or high-gradient terrain
 - **Implementation**: Uses finite differences to estimate local terrain gradient magnitude
-- **Mapping to TAMOLS**: Corresponds to gradient-based edge detection in `tamols/map_processing.py`
+- **TAMOLS Reference**: `tamols/costs.py:add_edge_avoidance_cost` (lines 164-185)
+- **Weight Parameter**: `weight_edge_avoidance` (default: 5.0)
 
 #### Roughness Penalty
 - **Purpose**: Prefer smooth, flat terrain over rough/irregular surfaces
 - **Implementation**: Computes height variance over a small patch around the candidate
-- **Mapping to TAMOLS**: Related to terrain smoothing and local planarity checks
+- **TAMOLS Reference**: Related to terrain smoothing in `tamols/map_processing.py`
+- **Weight Parameter**: `weight_roughness` (default: 2.0)
 
 #### Previous Solution Tracking
-- **Purpose**: Minimize deviation from the seed foothold (reference trajectory)
-- **Implementation**: Penalizes Euclidean distance from candidate to seed in XY
-- **Mapping to TAMOLS**: Corresponds to tracking cost in `tamols/costs.py`
+- **Purpose**: Minimize deviation from the seed foothold (previous solution)
+- **Implementation**: Penalizes squared distance from candidate to seed: `||candidate - seed||²`
+- **TAMOLS Reference**: `tamols/costs.py:add_previous_solution_cost` (lines 187-215)
+- **Weight Parameter**: `weight_previous_solution` (default: 0.01)
 
 #### Kinematic Reachability
 - **Purpose**: Ensure foothold is within leg's kinematic reach
-- **Implementation**: Checks hip-to-foothold distance against `l_min` and `l_max` bounds
-- **Mapping to TAMOLS**: Corresponds to kinematic constraints in `tamols/constraints.py`
+- **Implementation**: Enforces `l_min ≤ ||hip - foot|| ≤ l_max` via quadratic penalty
+- **TAMOLS Reference**: `tamols/constraints.py:add_kinematic_constraints` (lines 130-154)
+- **Weight Parameter**: `weight_kinematic` (default: 10.0)
 
-#### Forward Progress (Anti-Conservative) **NEW**
-- **Purpose**: Prevent overly conservative behavior and standing still
-- **Implementation**: Penalizes footholds that don't contribute to forward motion relative to hip
-- **Effect**: Encourages robot to keep making progress, avoiding local minima where robot stops moving
-- **Weight Parameter**: `weight_forward_progress` (default: 3.0)
+#### Nominal Kinematic Cost (GIA) **UPDATED**
+- **Purpose**: Maintain desired hip height and nominal leg configuration
+- **Implementation**: Penalizes deviation from desired base-to-foot vector: `||hip - (candidate - [0,0,-h_des])||²`
+- **TAMOLS Reference**: `tamols/costs.py:add_nominal_kinematic_cost` (lines 101-130)
+- **GIA Principle**: Maintains consistent kinematic configuration independent of gait phase
+- **Weight Parameter**: `weight_nominal_kinematic` (default: 20.0)
+- **Configuration**: `h_des` - desired hip height (default: 0.25m for go1/go2, 0.30m for aliengo)
 
-#### Velocity Alignment (GIA Principle) **NEW**
-- **Purpose**: Support Gait Independent Adaptation (GIA) by aligning footholds with motion direction
-- **Implementation**: Encourages foothold displacement aligned with robot's current velocity vector
-- **Effect**: Footholds naturally follow the direction of motion, independent of gait timing
-- **Weight Parameter**: `weight_velocity_alignment` (default: 2.0)
-
-#### Step Consistency (GIA Principle) **NEW**
-- **Purpose**: Maintain consistent step patterns across all legs for stable periodic gaits
-- **Implementation**: Minimizes variance in step lengths across legs
-- **Effect**: Promotes symmetric, balanced gait patterns that support GIA principles
-- **Weight Parameter**: `weight_step_consistency` (default: 1.5)
+#### Reference Tracking Cost (GIA, Anti-Conservative) **UPDATED**
+- **Purpose**: Track reference velocity direction, preventing standing still
+- **Implementation**: Penalizes footholds that oppose desired velocity direction (X-direction focus like TAMOLS)
+- **TAMOLS Reference**: `tamols/costs.py:add_tracking_cost` (lines 13-34)
+- **GIA Principle**: Supports motion in desired direction independent of gait timing
+- **Anti-Conservative**: Prevents robot from stalling or moving backward
+- **Weight Parameter**: `weight_reference_tracking` (default: 2.0)
 
 ### 3. Candidate Selection
 - Evaluates all candidates using the cost function
@@ -82,13 +84,15 @@ simulation_params = {
         'patch_size': 3,              # heightmap patch size for gradient estimation
         
         # Cost weights (tune these for your terrain/robot)
-        'weight_edge_avoidance': 5.0,       # penalize high gradients
-        'weight_roughness': 2.0,            # penalize rough terrain
-        'weight_deviation': 1.0,            # penalize deviation from seed
-        'weight_kinematic': 10.0,           # penalize unreachable positions
-        'weight_forward_progress': 3.0,     # penalize lack of forward motion (anti-conservative)
-        'weight_velocity_alignment': 2.0,   # encourage velocity-aligned footholds (GIA)
-        'weight_step_consistency': 1.5,     # maintain consistent step patterns (GIA)
+        'weight_edge_avoidance': 5.0,         # from tamols/costs.py:add_edge_avoidance_cost
+        'weight_roughness': 2.0,              # terrain roughness penalty
+        'weight_previous_solution': 0.01,     # from tamols/costs.py:add_previous_solution_cost
+        'weight_kinematic': 10.0,             # from tamols/constraints.py:add_kinematic_constraints
+        'weight_nominal_kinematic': 20.0,     # from tamols/costs.py:add_nominal_kinematic_cost (GIA)
+        'weight_reference_tracking': 2.0,     # from tamols/costs.py:add_tracking_cost (GIA, anti-conservative)
+        
+        # Nominal kinematic parameters
+        'h_des': 0.25,                        # [m] desired hip height (go1/go2: 0.25, aliengo: 0.30)
         
         # Kinematic bounds per robot (distance from hip to foothold)
         'l_min': {'go1': 0.15, 'go2': 0.15, 'aliengo': 0.18, ...},
@@ -108,7 +112,7 @@ simulation_params = {
 - Decrease `search_resolution` for finer search (e.g., 0.02)
 
 ### For Smoother Trajectories
-- Increase `weight_deviation` to stay closer to nominal footholds
+- Increase `weight_previous_solution` to stay closer to seed footholds
 - Decrease `search_radius` to limit foothold variation
 
 ### For Rough Terrain
@@ -118,49 +122,62 @@ simulation_params = {
 ### For Kinematic Safety
 - Ensure `l_min` and `l_max` match your robot's actual leg reach
 - Increase `weight_kinematic` if candidates outside reach are still selected
+- Adjust `h_des` to match your robot's nominal hip height
 
 ### To Prevent Conservative Behavior (Anti-Standing Still)
-- Increase `weight_forward_progress` (e.g., 5.0 or higher)
-- This penalizes footholds that don't move forward
+- Increase `weight_reference_tracking` (e.g., 5.0 or higher)
+- This penalizes footholds that oppose desired velocity direction
 - Useful when robot tends to stop or take very small steps
 - **Caution**: Too high values may cause instability on difficult terrain
 
 ### For GIA Compliance (Gait Independent Adaptation)
-- Increase `weight_velocity_alignment` (e.g., 3.0-4.0) to strongly align with velocity
-- Increase `weight_step_consistency` (e.g., 2.0-3.0) to maintain symmetric gaits
-- These weights help maintain stable, periodic gaits independent of specific timing
+- Increase `weight_nominal_kinematic` (e.g., 30.0-40.0) to strongly maintain hip height
+- Increase `weight_reference_tracking` (e.g., 3.0-5.0) to align with velocity
+- These weights help maintain stable, gait-independent kinematic configuration
 - **Balance**: Higher GIA weights improve gait stability but reduce terrain adaptability
 
 ### Recommended Weight Combinations
+
+**TAMOLS Reference Mode** (matches reference implementation):
+```python
+'weight_edge_avoidance': 5.0,         # ~3 in TAMOLS
+'weight_roughness': 2.0,
+'weight_previous_solution': 0.01,     # 0.01 in TAMOLS
+'weight_kinematic': 10.0,
+'weight_nominal_kinematic': 20.0,     # 20 in TAMOLS
+'weight_reference_tracking': 2.0,     # ~2 in TAMOLS (tracking cost weight)
+'h_des': 0.25,                        # 0.25 in TAMOLS for go2
+```
 
 **Conservative Mode** (safer, smoother):
 ```python
 'weight_edge_avoidance': 8.0,
 'weight_roughness': 3.0,
-'weight_deviation': 2.0,
-'weight_forward_progress': 1.0,  # Low - allows careful stepping
-'weight_velocity_alignment': 1.0,
-'weight_step_consistency': 1.0,
+'weight_previous_solution': 0.02,      # Higher - stays closer to seed
+'weight_kinematic': 15.0,
+'weight_nominal_kinematic': 10.0,      # Lower - more terrain adaptation
+'weight_reference_tracking': 1.0,      # Lower - allows careful stepping
 ```
 
 **Aggressive Mode** (faster, more progress):
 ```python
-'weight_edge_avoidance': 4.0,
-'weight_roughness': 1.5,
-'weight_deviation': 0.5,
-'weight_forward_progress': 5.0,  # High - encourages forward motion
-'weight_velocity_alignment': 3.0,
-'weight_step_consistency': 2.0,
+'weight_edge_avoidance': 3.0,
+'weight_roughness': 1.0,
+'weight_previous_solution': 0.005,     # Lower - more exploration
+'weight_kinematic': 10.0,
+'weight_nominal_kinematic': 15.0,
+'weight_reference_tracking': 5.0,      # Higher - strong forward bias
 ```
 
 **GIA-Optimized Mode** (stable gaits, balanced):
 ```python
 'weight_edge_avoidance': 5.0,
 'weight_roughness': 2.0,
-'weight_deviation': 1.0,
-'weight_forward_progress': 3.0,
-'weight_velocity_alignment': 4.0,  # High - strong velocity alignment
-'weight_step_consistency': 3.0,    # High - symmetric gait
+'weight_previous_solution': 0.01,
+'weight_kinematic': 10.0,
+'weight_nominal_kinematic': 30.0,      # High - maintains hip height
+'weight_reference_tracking': 3.0,      # High - tracks velocity direction
+'h_des': 0.25,                         # Tune for your robot
 ```
 
 ### Performance Tuning
@@ -199,64 +216,98 @@ adapted_footholds, constraints = vfa.get_footholds_adapted(reference_footholds)
 
 ## GIA Principles (Gait Independent Adaptation)
 
-The new cost functions support **Gait Independent Adaptation (GIA)** principles, which aim to select footholds that maintain stable, periodic gaits independent of specific gait timing:
+Based on the TAMOLS reference implementation (`ianpedroza/tamols-rl`), this implementation supports **Gait Independent Adaptation (GIA)** principles.
 
 ### What is GIA?
 
-GIA is a locomotion principle where foothold selection is based primarily on:
-1. **Terrain characteristics** (safety, stability)
-2. **Kinematic feasibility** (reachability)
-3. **Motion direction** (velocity alignment)
-4. **Gait symmetry** (consistent step patterns)
+GIA (also known as GIAC - Gait Independent Angular momentum Control in the reference) is a control approach where:
+1. **Foothold selection** is based on terrain and kinematics, not gait phase
+2. **Dynamic stability** is maintained through proper angular momentum management
+3. **Kinematic configuration** remains consistent independent of gait timing
 
-Rather than being tied to specific gait phases or timing.
+### GIA in TAMOLS Reference
 
-### Why GIA Matters
+The TAMOLS reference (`go2-hrl/fetch/tamols/`) implements GIA through:
 
-- **Robustness**: Gaits remain stable even with timing variations or disturbances
-- **Adaptability**: Robot can adjust gait parameters (frequency, duty cycle) without replanning footholds
-- **Efficiency**: Symmetric, consistent steps reduce energy consumption
-- **Predictability**: Periodic patterns make trajectory planning more reliable
+1. **Dynamics Constraints** (`constraints.py:add_dynamics_constraints`):
+   - GIAC stability constraints: `m·det(p_ij, p_B - p_i, a_B) - p_ij·L_dot_B ≤ ε`
+   - Friction cone constraints ensuring stability
+   - Enforced continuously independent of gait phase
 
-### GIA in TAMOLS
+2. **Nominal Kinematic Cost** (`costs.py:add_nominal_kinematic_cost`):
+   - Maintains desired hip height `h_des`
+   - Penalizes: `||base + R_B·hip_offset - l_des - p_i||²`
+   - Keeps legs in nominal configuration independent of gait
 
-The TAMOLS implementation supports GIA through:
+3. **Tracking Cost** (`costs.py:add_tracking_cost`):
+   - Tracks reference velocity (X direction only in TAMOLS)
+   - Ensures forward progress independent of gait timing
+   - Weight: 2·T_k / tau_sampling_rate per sample
 
-1. **Velocity Alignment Cost** (`weight_velocity_alignment`):
-   - Encourages footholds that align with the robot's current velocity direction
-   - Ensures foot placements naturally follow the direction of motion
-   - Decouples foothold selection from gait phase
+### GIA in Our Implementation
 
-2. **Step Consistency Cost** (`weight_step_consistency`):
-   - Maintains similar step lengths across all legs
-   - Promotes symmetric gait patterns
-   - Reduces left-right and front-rear asymmetries
+Since our foothold planner is simpler (no full trajectory optimization), we adapt GIA principles:
 
-3. **Forward Progress Cost** (`weight_forward_progress`):
-   - Prevents the robot from stalling or taking excessively small steps
-   - Maintains forward momentum independent of gait type
-   - Complements GIA by ensuring continuous progress
+1. **Nominal Kinematic Cost** (`weight_nominal_kinematic`):
+   - From TAMOLS: `costs.py:add_nominal_kinematic_cost`
+   - Maintains desired hip height `h_des`
+   - Penalizes: `||hip - (candidate - [0,0,-h_des])||²`
+   - **Effect**: Keeps robot at consistent height independent of gait phase
+   - **Weight**: 20.0 (matches TAMOLS default)
+
+2. **Reference Tracking Cost** (`weight_reference_tracking`):
+   - From TAMOLS: `costs.py:add_tracking_cost`
+   - Tracks desired velocity direction (X-direction focus)
+   - Penalizes footholds opposing motion direction
+   - **Effect**: Ensures forward progress, prevents standing still
+   - **Anti-Conservative**: Avoids local minima where robot stops
+   - **Weight**: 2.0 (matches TAMOLS tracking weight)
+
+### Differences from Full TAMOLS
+
+Our implementation adapts TAMOLS for foothold selection (vs. full trajectory optimization):
+
+**Simplified**:
+- No spline-based trajectory optimization
+- No full GIAC dynamics constraints (would require trajectory)
+- No angular momentum derivative computation
+
+**Retained**:
+- ✓ Kinematic reachability constraints (`l_min/l_max`)
+- ✓ Nominal kinematic cost (hip height maintenance)
+- ✓ Reference tracking (velocity direction)
+- ✓ Edge avoidance (gradient-based)
+- ✓ Previous solution tracking
+- ✓ Foothold-on-ground (implicit via heightmap query)
 
 ### Tuning for GIA
 
 To emphasize GIA compliance:
-- Set `weight_velocity_alignment` relatively high (3.0-4.0)
-- Set `weight_step_consistency` to moderate-high (2.0-3.0)
-- Balance with terrain safety weights (`edge_avoidance`, `roughness`)
-- Monitor gait symmetry and adjust if asymmetries develop
+- Set `weight_nominal_kinematic` high (30.0-40.0) to maintain hip height
+- Set `weight_reference_tracking` moderate-high (3.0-5.0) to track velocity
+- Ensure `h_des` matches your robot's nominal hip height
+- Balance with terrain safety weights
 
 **Example GIA-optimized configuration:**
 ```python
 'tamols_params': {
     'weight_edge_avoidance': 5.0,
     'weight_roughness': 2.0,
-    'weight_deviation': 1.0,
+    'weight_previous_solution': 0.01,
     'weight_kinematic': 10.0,
-    'weight_forward_progress': 3.0,
-    'weight_velocity_alignment': 4.0,  # Emphasis on velocity alignment
-    'weight_step_consistency': 3.0,     # Emphasis on gait symmetry
+    'weight_nominal_kinematic': 30.0,    # High - maintains hip height (GIA)
+    'weight_reference_tracking': 3.0,    # High - tracks velocity (GIA)
+    'h_des': 0.25,                       # Tune for your robot
 }
 ```
+
+### Reference
+
+For full TAMOLS implementation with GIAC dynamics constraints, see:
+- https://github.com/ianpedroza/tamols-rl/tree/main/go2-hrl/fetch/tamols
+- `constraints.py`: GIAC constraints and kinematic bounds
+- `costs.py`: All cost functions including nominal kinematics and tracking
+- `map_processing.py`: Heightmap processing and gradient computation
 
 ## Backward Compatibility
 
