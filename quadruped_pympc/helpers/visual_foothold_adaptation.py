@@ -69,10 +69,9 @@ class VisualFootholdAdaptation:
             if heightmaps[leg_name].data is None:
                 return False
 
-        # Store forward velocity and base orientation for TAMOLS
+        # Store forward velocity for TAMOLS reference tracking
         if self.adaptation_strategy == 'tamols':
             self.forward_vel = forward_vel
-            self.base_orientation = base_orientation
 
         if self.adaptation_strategy == 'height':
             for leg_id, leg_name in enumerate(legs_order):
@@ -149,7 +148,7 @@ class VisualFootholdAdaptation:
 
                     # Compute TAMOLS-inspired cost
                     score = self._compute_tamols_score(
-                        candidate, seed_foothold, hip_position, heightmap, leg_name, reference_footholds
+                        candidate, seed_foothold, hip_position, heightmap
                     )
 
                     if score < best_score:
@@ -205,7 +204,7 @@ class VisualFootholdAdaptation:
 
         return candidates
 
-    def _compute_tamols_score(self, candidate, seed, hip_position, heightmap, leg_name, all_footholds):
+    def _compute_tamols_score(self, candidate, seed, hip_position, heightmap):
         """Compute TAMOLS-inspired cost for a candidate foothold.
 
         Combines multiple cost terms inspired by TAMOLS reference (ianpedroza/tamols-rl):
@@ -221,8 +220,6 @@ class VisualFootholdAdaptation:
             seed: np.ndarray [x, y, z] seed/reference foothold in world frame
             hip_position: np.ndarray [x, y, z] hip position in world frame
             heightmap: HeightMap object for querying terrain
-            leg_name: str name of the leg (FL, FR, RL, RR)
-            all_footholds: LegsAttr object with all leg footholds
 
         Returns:
             float: total cost (lower is better)
