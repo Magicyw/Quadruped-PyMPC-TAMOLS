@@ -15,7 +15,7 @@ The TAMOLS strategy performs a local search around each leg's seed foothold posi
 
 ### 2. Cost Metrics
 
-The total cost for each candidate combines four TAMOLS-inspired metrics:
+The total cost for each candidate combines seven TAMOLS-inspired metrics:
 
 #### Edge Avoidance
 - **Purpose**: Avoid placing footholds near edges, steps, or high-gradient terrain
@@ -36,6 +36,24 @@ The total cost for each candidate combines four TAMOLS-inspired metrics:
 - **Purpose**: Ensure foothold is within leg's kinematic reach
 - **Implementation**: Checks hip-to-foothold distance against `l_min` and `l_max` bounds
 - **Mapping to TAMOLS**: Corresponds to kinematic constraints in `tamols/constraints.py`
+
+#### Forward Progress (Anti-Conservative) **NEW**
+- **Purpose**: Prevent overly conservative behavior and standing still
+- **Implementation**: Penalizes footholds that don't contribute to forward motion relative to hip
+- **Effect**: Encourages robot to keep making progress, avoiding local minima where robot stops moving
+- **Weight Parameter**: `weight_forward_progress` (default: 3.0)
+
+#### Velocity Alignment (GIA Principle) **NEW**
+- **Purpose**: Support Gait Independent Adaptation (GIA) by aligning footholds with motion direction
+- **Implementation**: Encourages foothold displacement aligned with robot's current velocity vector
+- **Effect**: Footholds naturally follow the direction of motion, independent of gait timing
+- **Weight Parameter**: `weight_velocity_alignment` (default: 2.0)
+
+#### Step Consistency (GIA Principle) **NEW**
+- **Purpose**: Maintain consistent step patterns across all legs for stable periodic gaits
+- **Implementation**: Minimizes variance in step lengths across legs
+- **Effect**: Promotes symmetric, balanced gait patterns that support GIA principles
+- **Weight Parameter**: `weight_step_consistency` (default: 1.5)
 
 ### 3. Candidate Selection
 - Evaluates all candidates using the cost function
@@ -64,10 +82,13 @@ simulation_params = {
         'patch_size': 3,              # heightmap patch size for gradient estimation
         
         # Cost weights (tune these for your terrain/robot)
-        'weight_edge_avoidance': 5.0,  # penalize high gradients
-        'weight_roughness': 2.0,       # penalize rough terrain
-        'weight_deviation': 1.0,       # penalize deviation from seed
-        'weight_kinematic': 10.0,      # penalize unreachable positions
+        'weight_edge_avoidance': 5.0,       # penalize high gradients
+        'weight_roughness': 2.0,            # penalize rough terrain
+        'weight_deviation': 1.0,            # penalize deviation from seed
+        'weight_kinematic': 10.0,           # penalize unreachable positions
+        'weight_forward_progress': 3.0,     # penalize lack of forward motion (anti-conservative)
+        'weight_velocity_alignment': 2.0,   # encourage velocity-aligned footholds (GIA)
+        'weight_step_consistency': 1.5,     # maintain consistent step patterns (GIA)
         
         # Kinematic bounds per robot (distance from hip to foothold)
         'l_min': {'go1': 0.15, 'go2': 0.15, 'aliengo': 0.18, ...},
@@ -97,6 +118,50 @@ simulation_params = {
 ### For Kinematic Safety
 - Ensure `l_min` and `l_max` match your robot's actual leg reach
 - Increase `weight_kinematic` if candidates outside reach are still selected
+
+### To Prevent Conservative Behavior (Anti-Standing Still)
+- Increase `weight_forward_progress` (e.g., 5.0 or higher)
+- This penalizes footholds that don't move forward
+- Useful when robot tends to stop or take very small steps
+- **Caution**: Too high values may cause instability on difficult terrain
+
+### For GIA Compliance (Gait Independent Adaptation)
+- Increase `weight_velocity_alignment` (e.g., 3.0-4.0) to strongly align with velocity
+- Increase `weight_step_consistency` (e.g., 2.0-3.0) to maintain symmetric gaits
+- These weights help maintain stable, periodic gaits independent of specific timing
+- **Balance**: Higher GIA weights improve gait stability but reduce terrain adaptability
+
+### Recommended Weight Combinations
+
+**Conservative Mode** (safer, smoother):
+```python
+'weight_edge_avoidance': 8.0,
+'weight_roughness': 3.0,
+'weight_deviation': 2.0,
+'weight_forward_progress': 1.0,  # Low - allows careful stepping
+'weight_velocity_alignment': 1.0,
+'weight_step_consistency': 1.0,
+```
+
+**Aggressive Mode** (faster, more progress):
+```python
+'weight_edge_avoidance': 4.0,
+'weight_roughness': 1.5,
+'weight_deviation': 0.5,
+'weight_forward_progress': 5.0,  # High - encourages forward motion
+'weight_velocity_alignment': 3.0,
+'weight_step_consistency': 2.0,
+```
+
+**GIA-Optimized Mode** (stable gaits, balanced):
+```python
+'weight_edge_avoidance': 5.0,
+'weight_roughness': 2.0,
+'weight_deviation': 1.0,
+'weight_forward_progress': 3.0,
+'weight_velocity_alignment': 4.0,  # High - strong velocity alignment
+'weight_step_consistency': 3.0,    # High - symmetric gait
+```
 
 ### Performance Tuning
 - Decrease `search_radius` or increase `search_resolution` to reduce candidate count
@@ -132,13 +197,74 @@ success = vfa.compute_adaptation(
 adapted_footholds, constraints = vfa.get_footholds_adapted(reference_footholds)
 ```
 
+## GIA Principles (Gait Independent Adaptation)
+
+The new cost functions support **Gait Independent Adaptation (GIA)** principles, which aim to select footholds that maintain stable, periodic gaits independent of specific gait timing:
+
+### What is GIA?
+
+GIA is a locomotion principle where foothold selection is based primarily on:
+1. **Terrain characteristics** (safety, stability)
+2. **Kinematic feasibility** (reachability)
+3. **Motion direction** (velocity alignment)
+4. **Gait symmetry** (consistent step patterns)
+
+Rather than being tied to specific gait phases or timing.
+
+### Why GIA Matters
+
+- **Robustness**: Gaits remain stable even with timing variations or disturbances
+- **Adaptability**: Robot can adjust gait parameters (frequency, duty cycle) without replanning footholds
+- **Efficiency**: Symmetric, consistent steps reduce energy consumption
+- **Predictability**: Periodic patterns make trajectory planning more reliable
+
+### GIA in TAMOLS
+
+The TAMOLS implementation supports GIA through:
+
+1. **Velocity Alignment Cost** (`weight_velocity_alignment`):
+   - Encourages footholds that align with the robot's current velocity direction
+   - Ensures foot placements naturally follow the direction of motion
+   - Decouples foothold selection from gait phase
+
+2. **Step Consistency Cost** (`weight_step_consistency`):
+   - Maintains similar step lengths across all legs
+   - Promotes symmetric gait patterns
+   - Reduces left-right and front-rear asymmetries
+
+3. **Forward Progress Cost** (`weight_forward_progress`):
+   - Prevents the robot from stalling or taking excessively small steps
+   - Maintains forward momentum independent of gait type
+   - Complements GIA by ensuring continuous progress
+
+### Tuning for GIA
+
+To emphasize GIA compliance:
+- Set `weight_velocity_alignment` relatively high (3.0-4.0)
+- Set `weight_step_consistency` to moderate-high (2.0-3.0)
+- Balance with terrain safety weights (`edge_avoidance`, `roughness`)
+- Monitor gait symmetry and adjust if asymmetries develop
+
+**Example GIA-optimized configuration:**
+```python
+'tamols_params': {
+    'weight_edge_avoidance': 5.0,
+    'weight_roughness': 2.0,
+    'weight_deviation': 1.0,
+    'weight_kinematic': 10.0,
+    'weight_forward_progress': 3.0,
+    'weight_velocity_alignment': 4.0,  # Emphasis on velocity alignment
+    'weight_step_consistency': 3.0,     # Emphasis on gait symmetry
+}
+```
+
 ## Backward Compatibility
 
 The implementation is fully backward compatible with existing strategies:
 - `'blind'`: No adaptation, uses seed footholds directly
 - `'height'`: Simple height adjustment from heightmap
 - `'vfa'`: Uses VFA neural network (if installed)
-- `'tamols'`: New TAMOLS-inspired strategy
+- `'tamols'`: New TAMOLS-inspired strategy with GIA support
 
 Existing code continues to work without modification. Only enable TAMOLS by changing the config.
 

@@ -216,6 +216,9 @@ simulation_params = {
         'weight_roughness': 2.0,         # penalize terrain roughness/irregularity
         'weight_deviation': 1.0,         # penalize deviation from seed foothold
         'weight_kinematic': 10.0,        # penalize candidates outside kinematic reach
+        'weight_forward_progress': 3.0,  # penalize lack of forward motion (prevents standing still)
+        'weight_velocity_alignment': 2.0, # encourage footholds aligned with velocity (GIA principle)
+        'weight_step_consistency': 1.5,  # maintain consistent step patterns across legs (GIA principle)
         
         # Kinematic reachability constraints (robot-specific, in meters)
         # Distance from hip to foothold must be in [l_min, l_max]
