@@ -125,12 +125,12 @@ class VisualFootholdAdaptation:
         elif self.adaptation_strategy == 'tamols':
             # TAMOLS-inspired foothold adaptation strategy
             # Performs local search around seed footholds using terrain-aware cost metrics
-            
+
             # Estimate overall terrain roughness for adaptive step height
             if self.tamols_params.get('adaptive_step_height', True):
                 terrain_roughness = self._estimate_terrain_roughness(heightmaps, reference_footholds, legs_order)
                 self.current_terrain_roughness = terrain_roughness
-            
+
             for leg_id, leg_name in enumerate(legs_order):
                 seed_foothold = reference_footholds[leg_name].copy()
                 hip_position = hip_positions[leg_name]
@@ -386,20 +386,20 @@ class VisualFootholdAdaptation:
         # In TAMOLS, h_des is the desired hip height (default 0.25m for go2)
         h_des = self.tamols_params.get('h_des', 0.25)
         l_des = np.array([0.0, 0.0, -h_des])
-        
+
         # In TAMOLS: cost = ||base + R_B * hip_offset - l_des - p_i||^2
         # Simplified version (no rotation): base at desired position relative to foot
         # base_minus_leg = hip_position - l_des
         # cost = ||(base_minus_leg) - candidate||^2
-        
+
         # Desired base position if foot is at candidate
         desired_base_from_foot = candidate - l_des
-        
+
         # Actual hip position
         # Cost penalizes deviation from nominal configuration
         diff = hip_position - desired_base_from_foot
         cost = np.dot(diff, diff)
-        
+
         return cost
 
     def _compute_reference_tracking_cost(self, candidate, seed):
@@ -424,30 +424,30 @@ class VisualFootholdAdaptation:
                 # Backward step, high cost
                 return displacement ** 2
             return 0.0
-        
+
         # Get reference velocity
         ref_vel = self.forward_vel[:2]  # XY plane
         vel_magnitude = np.linalg.norm(ref_vel)
-        
+
         if vel_magnitude < 0.01:
             # Nearly stationary, no tracking cost
             return 0.0
-        
+
         # In TAMOLS: cost = (vel - ref_vel)^2, but we don't have foothold velocity
         # Instead, we check if foothold supports the desired motion direction
         # Foothold displacement should align with velocity
         displacement = candidate[:2] - seed[:2]
-        
+
         # Project displacement onto velocity direction (like TAMOLS tracking in X only)
         # We focus on X direction for consistency with TAMOLS
         vel_x = ref_vel[0]
         displacement_x = displacement[0]
-        
+
         # Cost: penalize if foothold doesn't support forward velocity
         # Similar to TAMOLS: (actual - desired)^2
         # If vel_x > 0 (forward), we want displacement_x > 0
         # Cost = (displacement_x - desired_displacement)^2
-        
+
         # Simple version: penalize if displacement opposes velocity
         if vel_x > 0 and displacement_x < 0:
             # Moving forward but foothold goes backward
@@ -458,7 +458,7 @@ class VisualFootholdAdaptation:
         else:
             # Displacement aligns with velocity, minimal cost
             cost = 0.0
-        
+
         return cost
 
     def _compute_swing_clearance_cost(self, candidate, seed, hip_position, heightmap):
@@ -479,31 +479,35 @@ class VisualFootholdAdaptation:
         """
         swing_margin = self.tamols_params.get('swing_safety_margin', 0.05)
         n_samples = self.tamols_params.get('swing_path_samples', 10)
-        
+
+        # Ensure at least 2 samples to avoid division by zero
+        if n_samples < 2:
+            n_samples = 2
+
         cost = 0.0
-        
+
         # Sample points along a straight-line path from seed (current foot) to candidate
         # We approximate the swing as a straight line in 3D from current position to target
         # In reality, swing has an arc, but straight line is conservative for collision check
         for i in range(n_samples):
             alpha = i / (n_samples - 1)
-            
+
             # Linear interpolation along swing path
             # We sample from seed to candidate (foot trajectory)
             path_point = seed + alpha * (candidate - seed)
-            
+
             # Query terrain height at this XY location
             terrain_height = heightmap.get_height(path_point[:2])
-            
+
             if terrain_height is not None:
                 # Check clearance: foot height - terrain height
                 clearance = path_point[2] - terrain_height
-                
+
                 if clearance < swing_margin:
                     # Insufficient clearance - penalize quadratically
                     violation = swing_margin - clearance
                     cost += violation ** 2
-        
+
         return cost
 
     def _estimate_terrain_roughness(self, heightmaps, reference_footholds, legs_order):
@@ -521,29 +525,33 @@ class VisualFootholdAdaptation:
             float: estimated terrain roughness (higher = more rough)
         """
         roughness_values = []
-        
+
         for leg_name in legs_order:
             heightmap = heightmaps[leg_name]
             foothold = reference_footholds[leg_name]
-            
+
             # Sample heights in a patch around the foothold
-            delta = 0.05  # Sampling distance
+            # Use configurable sampling distance (default 5cm)
+            delta = self.tamols_params.get('roughness_sampling_distance', 0.05)
             heights = []
-            
+
             for i in range(-2, 3):
                 for j in range(-2, 3):
                     query_pos = foothold.copy()
                     query_pos[0] += i * delta
                     query_pos[1] += j * delta
-                    h = heightmap.get_height(query_pos)
+                    # Pass 2D coordinates to get_height (consistent with other uses)
+                    h = heightmap.get_height(query_pos[:2])
                     if h is not None:
                         heights.append(h)
-            
-            if len(heights) >= 10:
+
+            # Need at least 40% of samples (10 out of 25) for reliable estimate
+            min_samples = max(10, int(0.4 * 25))
+            if len(heights) >= min_samples:
                 # Compute local variance as roughness measure
                 local_roughness = np.var(heights)
                 roughness_values.append(local_roughness)
-        
+
         if len(roughness_values) > 0:
             # Return mean roughness across all legs
             return np.mean(roughness_values)
@@ -564,22 +572,22 @@ class VisualFootholdAdaptation:
         """
         if not self.adaptation_strategy == 'tamols':
             return base_step_height
-        
+
         if not self.tamols_params.get('adaptive_step_height', True):
             return base_step_height
-        
+
         if not hasattr(self, 'current_terrain_roughness'):
             return base_step_height
-        
+
         # Get parameters
         gain = self.tamols_params.get('step_height_gain', 0.5)
         max_multiplier = self.tamols_params.get('max_step_height_multiplier', 2.0)
-        
+
         # Adaptive height = base + roughness * gain
         adaptive_height = base_step_height + self.current_terrain_roughness * gain
-        
+
         # Clamp to maximum
         max_height = base_step_height * max_multiplier
         adaptive_height = min(adaptive_height, max_height)
-        
+
         return adaptive_height

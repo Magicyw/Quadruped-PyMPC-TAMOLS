@@ -48,13 +48,13 @@ elif (robot == 'hyqreal1'):
     inertia = np.array([[4.55031444e+00, 2.75249434e-03, -5.11957307e-01],
                         [2.75249434e-03, 2.02411774e+01, -7.38560592e-04],
                         [-5.11957307e-01, -7.38560592e-04, 2.14269772e+01]])
-    
+
 elif (robot == 'hyqreal2'):
     mass = 126.69
     inertia = np.array([[4.55031444e+00, 2.75249434e-03, -5.11957307e-01],
                         [2.75249434e-03, 2.02411774e+01, -7.38560592e-04],
                         [-5.11957307e-01, -7.38560592e-04, 2.14269772e+01]])
-    
+
 elif (robot == 'mini_cheetah'):
     mass = 12.5
     inertia = np.array([[1.58460467e-01, 1.21660000e-04, -1.55444692e-02],
@@ -212,7 +212,7 @@ simulation_params = {
         'search_radius': 0.15,           # [m] radius around seed foothold to search
         'search_resolution': 0.03,       # [m] grid step size for candidate sampling
         'patch_size': 3,                 # number of neighboring heightmap points to sample for gradient estimation
-        
+
         # Cost function weights (higher = more penalty)
         # Aligned with TAMOLS reference implementation (ianpedroza/tamols-rl)
         'weight_edge_avoidance': 5.0,         # from tamols/costs.py:add_edge_avoidance_cost
@@ -222,27 +222,28 @@ simulation_params = {
         'weight_nominal_kinematic': 20.0,     # from tamols/costs.py:add_nominal_kinematic_cost (GIA: maintains hip height)
         'weight_reference_tracking': 2.0,     # from tamols/costs.py:add_tracking_cost (GIA: tracks velocity, prevents standing still)
         'weight_swing_clearance': 8.0,        # swing leg collision avoidance cost (prevents leg hitting terrain during swing)
-        
+
         # Nominal kinematic parameters
         'h_des': 0.25,                        # [m] desired hip height for nominal kinematics (go1/go2: 0.25, aliengo: 0.30)
-        
+
         # Kinematic reachability constraints (robot-specific, in meters)
         # Distance from hip to foothold must be in [l_min, l_max]
         'l_min': {'go1': 0.15, 'go2': 0.15, 'aliengo': 0.18, 'b2': 0.25, 
                   'hyqreal1': 0.25, 'hyqreal2': 0.25, 'mini_cheetah': 0.12, 'spot': 0.20},
         'l_max': {'go1': 0.45, 'go2': 0.45, 'aliengo': 0.55, 'b2': 0.75, 
                   'hyqreal1': 0.75, 'hyqreal2': 0.75, 'mini_cheetah': 0.40, 'spot': 0.60},
-        
+
         # Swing clearance parameters
         'swing_safety_margin': 0.05,          # [m] minimum clearance above terrain during swing
         'swing_path_samples': 10,             # number of points to sample along swing path for collision check
-        
+
         # Adaptive step height parameters
         'adaptive_step_height': True,         # enable dynamic step height adjustment based on terrain
         'base_step_height': None,             # [m] base step height (None = use simulation_params['step_height'])
         'step_height_gain': 0.5,              # gain factor for roughness-based height adjustment (height_add = roughness * gain)
         'max_step_height_multiplier': 2.0,    # maximum step height = base_step_height * this multiplier
-        
+        'roughness_sampling_distance': 0.05,  # [m] sampling distance for terrain roughness estimation
+
         # Foothold constraint box size (for MPC foothold constraints)
         'constraint_box_dx': 0.05,       # [m] +/- x constraint around chosen foothold
         'constraint_box_dy': 0.05,       # [m] +/- y constraint around chosen foothold
@@ -284,7 +285,7 @@ simulation_params = {
     #                         'stepping_stones' (default)
     # Custom scene: provide full path to XML file (e.g., '/path/to/custom_scene.xml')
     'scene':                       'flat',
-    
+
     # Stepping stones terrain configuration (used when scene is a stepping_stones variant)
     # Set to None to use pre-generated XML files, or customize parameters here
     'stepping_stones_params':      None,  # Can be a dict with custom parameters
