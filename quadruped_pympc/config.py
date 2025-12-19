@@ -2,6 +2,7 @@
 and of the internal simulations that can be launch from the folder /simulation.
 """
 import numpy as np
+
 from quadruped_pympc.helpers.quadruped_utils import GaitType
 
 # These are used both for a real experiment and a simulation -----------
@@ -9,6 +10,7 @@ from quadruped_pympc.helpers.quadruped_utils import GaitType
 robot = 'aliengo'  # 'aliengo', 'go1', 'go2', 'b2', 'hyqreal1', 'hyqreal2', 'mini_cheetah', 'spot'  # TODO: Load from robot_descriptions.py
 
 from gym_quadruped.robot_cfgs import RobotConfig, get_robot_config
+
 robot_cfg: RobotConfig = get_robot_config(robot_name=robot)
 robot_leg_joints = robot_cfg.leg_joints
 robot_feet_geom_names = robot_cfg.feet_geom_names
@@ -219,6 +221,7 @@ simulation_params = {
         'weight_kinematic': 10.0,             # from tamols/constraints.py:add_kinematic_constraints
         'weight_nominal_kinematic': 20.0,     # from tamols/costs.py:add_nominal_kinematic_cost (GIA: maintains hip height)
         'weight_reference_tracking': 2.0,     # from tamols/costs.py:add_tracking_cost (GIA: tracks velocity, prevents standing still)
+        'weight_swing_clearance': 8.0,        # swing leg collision avoidance cost (prevents leg hitting terrain during swing)
         
         # Nominal kinematic parameters
         'h_des': 0.25,                        # [m] desired hip height for nominal kinematics (go1/go2: 0.25, aliengo: 0.30)
@@ -229,6 +232,16 @@ simulation_params = {
                   'hyqreal1': 0.25, 'hyqreal2': 0.25, 'mini_cheetah': 0.12, 'spot': 0.20},
         'l_max': {'go1': 0.45, 'go2': 0.45, 'aliengo': 0.55, 'b2': 0.75, 
                   'hyqreal1': 0.75, 'hyqreal2': 0.75, 'mini_cheetah': 0.40, 'spot': 0.60},
+        
+        # Swing clearance parameters
+        'swing_safety_margin': 0.05,          # [m] minimum clearance above terrain during swing
+        'swing_path_samples': 10,             # number of points to sample along swing path for collision check
+        
+        # Adaptive step height parameters
+        'adaptive_step_height': True,         # enable dynamic step height adjustment based on terrain
+        'base_step_height': None,             # [m] base step height (None = use simulation_params['step_height'])
+        'step_height_gain': 0.5,              # gain factor for roughness-based height adjustment (height_add = roughness * gain)
+        'max_step_height_multiplier': 2.0,    # maximum step height = base_step_height * this multiplier
         
         # Foothold constraint box size (for MPC foothold constraints)
         'constraint_box_dx': 0.05,       # [m] +/- x constraint around chosen foothold

@@ -57,6 +57,13 @@ The total cost for each candidate combines six TAMOLS-inspired metrics based on 
 - **Anti-Conservative**: Prevents robot from stalling or moving backward
 - **Weight Parameter**: `weight_reference_tracking` (default: 2.0)
 
+#### Swing Clearance Cost **NEW**
+- **Purpose**: Prevent swing leg collisions with terrain during leg swing
+- **Implementation**: Samples points along straight-line swing path from current position to candidate foothold, penalizes insufficient clearance above terrain
+- **Use Case**: Critical for avoiding collisions with step edges, obstacles, and uneven terrain during swing phase
+- **Weight Parameter**: `weight_swing_clearance` (default: 8.0)
+- **Configuration**: `swing_safety_margin` (default: 0.05m), `swing_path_samples` (default: 10)
+
 ### 3. Candidate Selection
 - Evaluates all candidates using the cost function
 - Selects candidate with minimum total cost
@@ -90,9 +97,20 @@ simulation_params = {
         'weight_kinematic': 10.0,             # from tamols/constraints.py:add_kinematic_constraints
         'weight_nominal_kinematic': 20.0,     # from tamols/costs.py:add_nominal_kinematic_cost (GIA)
         'weight_reference_tracking': 2.0,     # from tamols/costs.py:add_tracking_cost (GIA, anti-conservative)
+        'weight_swing_clearance': 8.0,        # swing leg collision avoidance (NEW)
         
         # Nominal kinematic parameters
         'h_des': 0.25,                        # [m] desired hip height (go1/go2: 0.25, aliengo: 0.30)
+        
+        # Swing clearance parameters (NEW)
+        'swing_safety_margin': 0.05,          # [m] minimum clearance above terrain during swing
+        'swing_path_samples': 10,             # number of points sampled along swing path
+        
+        # Adaptive step height (NEW)
+        'adaptive_step_height': True,         # enable dynamic step height adjustment
+        'base_step_height': None,             # [m] base step height (None = use simulation default)
+        'step_height_gain': 0.5,              # gain for roughness-based height adjustment
+        'max_step_height_multiplier': 2.0,    # maximum step height multiplier
         
         # Kinematic bounds per robot (distance from hip to foothold)
         'l_min': {'go1': 0.15, 'go2': 0.15, 'aliengo': 0.18, ...},
@@ -183,6 +201,79 @@ simulation_params = {
 ### Performance Tuning
 - Decrease `search_radius` or increase `search_resolution` to reduce candidate count
 - Current defaults: ~81 candidates per leg, reasonable for real-time control
+
+## Swing Collision Avoidance **NEW**
+
+### Problem
+
+During swing phase, the leg moves through the air from current position to target foothold. On challenging terrain (steps, obstacles, uneven ground), the swing trajectory may intersect terrain features, causing:
+- **Collisions with step edges** during upward/downward transitions
+- **Contact with obstacles** along the path
+- **Premature ground contact** on irregular terrain
+
+### Solution
+
+The implementation provides two complementary approaches:
+
+#### 1. Swing Clearance Cost (Foothold Selection)
+Evaluates each candidate foothold by checking if the swing path would collide with terrain:
+- Samples N points along straight-line path from current position to candidate
+- Checks clearance above terrain at each sample point
+- Penalizes candidates requiring low-clearance swings
+- **Weight**: `weight_swing_clearance` (default: 8.0)
+- **Margin**: `swing_safety_margin` (default: 0.05m above terrain)
+
+#### 2. Adaptive Step Height (Swing Trajectory)
+Dynamically adjusts swing apex height based on terrain difficulty:
+- Estimates terrain roughness from heightmap variance
+- Increases step height proportionally: `height = base + roughness × gain`
+- Clamps to maximum: `base × max_multiplier`
+- **Parameters**: `step_height_gain` (0.5), `max_step_height_multiplier` (2.0)
+
+### Usage
+
+Enable both features in configuration:
+```python
+'tamols_params': {
+    # Swing clearance cost
+    'weight_swing_clearance': 8.0,        # Penalize collision-prone footholds
+    'swing_safety_margin': 0.05,          # Minimum clearance [m]
+    'swing_path_samples': 10,             # Path sampling density
+    
+    # Adaptive step height
+    'adaptive_step_height': True,         # Enable dynamic adjustment
+    'step_height_gain': 0.5,              # Roughness sensitivity
+    'max_step_height_multiplier': 2.0,    # Maximum height increase
+}
+```
+
+### Integration with Swing Controller
+
+The adaptive step height is exposed via:
+```python
+adaptive_height = vfa.get_adaptive_step_height(base_step_height)
+# Use adaptive_height for swing trajectory generation
+```
+
+Integrate this in your swing controller or main loop to update step height based on terrain.
+
+### Tuning Guide
+
+**Increase `weight_swing_clearance`** (8.0 → 12.0) if:
+- Swing leg still hits obstacles
+- Robot frequently trips on step edges
+
+**Increase `swing_safety_margin`** (0.05 → 0.08) if:
+- Clearance is insufficient on rough terrain
+- Robot grazes obstacles during swing
+
+**Increase `step_height_gain`** (0.5 → 0.8) if:
+- Adaptive height doesn't increase enough on difficult terrain
+- Robot needs more clearance on obstacles
+
+**Decrease `step_height_gain`** (0.5 → 0.3) if:
+- Step height increases too aggressively
+- Robot wastes energy with unnecessarily high swings
 
 ## Usage Example
 
