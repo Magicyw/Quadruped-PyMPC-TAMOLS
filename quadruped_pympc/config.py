@@ -209,21 +209,21 @@ simulation_params = {
     # These parameters are used when visual_foothold_adaptation is set to 'tamols'
     'tamols_params': {
         # Candidate generation parameters
-        'search_radius': 0.15,           # [m] radius around seed foothold to search
-        'search_resolution': 0.03,       # [m] grid step size for candidate sampling
+        'search_radius': 0.35,           # [m] radius around seed foothold to search
+        'search_resolution': 0.04,       # [m] grid step size for candidate sampling
         'patch_size': 3,                 # number of neighboring heightmap points to sample for gradient estimation
-
+        'gradient_delta': 0.04,          # [m] offset for finite difference gradient estimation = search_resolution
         # Cost function weights (higher = more penalty)
         # Aligned with TAMOLS reference implementation (ianpedroza/tamols-rl)
-        'weight_edge_avoidance': 5.0,         # from tamols/costs.py:add_edge_avoidance_cost
-        'weight_roughness': 2.0,              # terrain roughness/irregularity  
-        'weight_previous_solution': 0.01,     # from tamols/costs.py:add_previous_solution_cost (deviation from seed)
+        'weight_edge_avoidance': 15.0,         # from tamols/costs.py:add_edge_avoidance_cost
+        'weight_roughness': 10.0,              # terrain roughness/irregularity  
+        'weight_previous_solution': 2,     # from tamols/costs.py:add_previous_solution_cost (deviation from seed)
         'weight_kinematic': 10.0,             # from tamols/constraints.py:add_kinematic_constraints
-        'weight_nominal_kinematic': 20.0,     # from tamols/costs.py:add_nominal_kinematic_cost (GIA: maintains hip height)
-        'weight_reference_tracking': 2.0,     # from tamols/costs.py:add_tracking_cost (GIA: tracks velocity, prevents standing still)
+        'weight_nominal_kinematic': 1.0,     # from tamols/costs.py:add_nominal_kinematic_cost (GIA: maintains hip height)
+        'weight_reference_tracking': 5.0,     # from tamols/costs.py:add_tracking_cost (GIA: tracks velocity, prevents standing still)
 
         # Nominal kinematic parameters
-        'h_des': 0.25,                        # [m] desired hip height for nominal kinematics (go1/go2: 0.25, aliengo: 0.30)
+        'h_des': hip_height,                        # [m] desired hip height for nominal kinematics (go1/go2: 0.25, aliengo: 0.30)
 
         # Kinematic reachability constraints (robot-specific, in meters)
         # Distance from hip to foothold must be in [l_min, l_max]
