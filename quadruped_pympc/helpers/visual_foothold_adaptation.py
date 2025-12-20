@@ -69,10 +69,6 @@ class VisualFootholdAdaptation:
             if heightmaps[leg_name].data is None:
                 return False
 
-        # Store forward velocity for TAMOLS reference tracking
-        if self.adaptation_strategy == 'tamols':
-            self.forward_vel = forward_vel
-
         if self.adaptation_strategy == 'height':
             for leg_id, leg_name in enumerate(legs_order):
                 height_adjustment = heightmaps[leg_name].get_height(reference_footholds[leg_name])
@@ -123,13 +119,10 @@ class VisualFootholdAdaptation:
                 # print("Safe map: ", safe_map)
 
         elif self.adaptation_strategy == 'tamols':
+            # Store forward velocity for TAMOLS reference tracking
+            self.forward_vel = forward_vel
             # TAMOLS-inspired foothold adaptation strategy
             # Performs local search around seed footholds using terrain-aware cost metrics
-
-            # Estimate overall terrain roughness for adaptive step height
-            if self.tamols_params.get('adaptive_step_height', True):
-                terrain_roughness = self._estimate_terrain_roughness(heightmaps, reference_footholds, legs_order)
-                self.current_terrain_roughness = terrain_roughness
 
             for leg_id, leg_name in enumerate(legs_order):
                 seed_foothold = reference_footholds[leg_name].copy()
@@ -194,8 +187,18 @@ class VisualFootholdAdaptation:
         Returns:
             List of candidate [x, y] positions
         """
-        radius = self.tamols_params.get('search_radius', 0.15)
-        resolution = self.tamols_params.get('search_resolution', 0.03)
+        if heightmap is not None and heightmap.data is not None:
+            candidates = []
+            rows, cols = heightmap.data.shape[:2]
+            for i in range(rows):
+                for j in range(cols):
+                    # heightmap.data[i][j][0] is [x, y, z]
+                    pos = heightmap.data[i][j][0]
+                    candidates.append([pos[0], pos[1]])
+            return candidates
+
+        radius = self.tamols_params.get('search_radius', 0.32)
+        resolution = self.tamols_params.get('search_resolution', 0.04)
 
         candidates = []
         # Create grid around seed
@@ -237,7 +240,6 @@ class VisualFootholdAdaptation:
         w_kin = self.tamols_params.get('weight_kinematic', 10.0)
         w_nominal_kin = self.tamols_params.get('weight_nominal_kinematic', 20.0)
         w_tracking = self.tamols_params.get('weight_reference_tracking', 2.0)
-        w_swing = self.tamols_params.get('weight_swing_clearance', 8.0)
 
         # 1. Kinematic reachability cost
         # From TAMOLS: constraints.py:add_kinematic_constraints (lines 130-154)
@@ -283,17 +285,10 @@ class VisualFootholdAdaptation:
             candidate, seed
         ) * w_tracking
 
-        # 7. Swing clearance cost
-        # Penalizes footholds that require swing trajectories passing through terrain
-        # Helps prevent swing leg collisions with obstacles (e.g. step edges)
-        swing_clearance_cost = self._compute_swing_clearance_cost(
-            candidate, seed, hip_position, heightmap
-        ) * w_swing
-
         # Total cost combines all terms
         total_cost = (
             kinematic_cost + edge_cost + roughness_cost + previous_solution_cost +
-            nominal_kinematic_cost + reference_tracking_cost + swing_clearance_cost
+            nominal_kinematic_cost + reference_tracking_cost
         )
 
         return total_cost
@@ -310,9 +305,10 @@ class VisualFootholdAdaptation:
         Returns:
             float: gradient magnitude cost
         """
-        delta = 0.02  # Small offset for finite difference
+        delta = self.tamols_params.get('gradient_delta', 0.04)
 
-        # Sample heights in a cross pattern (±x, ±y)
+        # Sample heights in a cross pattern (±x, ±y) around the candidate
+        # P1: (x+d, y), P2: (x-d, y), P3: (x, y+d), P4: (x, y-d)
         heights = []
         offsets = [np.array([delta, 0, 0]), np.array([-delta, 0, 0]), np.array([0, delta, 0]), np.array([0, -delta, 0])]
 
@@ -323,12 +319,14 @@ class VisualFootholdAdaptation:
                 heights.append(h)
 
         if len(heights) < 4:
-            # Not enough data, return high cost
+            # Not enough data (e.g., outside map or hole), return high cost to avoid this area
             return 1.0
 
-        # Estimate gradient using finite differences
+        # Estimate gradient using central finite differences: f'(x) approx (f(x+h) - f(x-h)) / 2h
         grad_x = abs(heights[0] - heights[1]) / (2 * delta)
         grad_y = abs(heights[2] - heights[3]) / (2 * delta)
+        
+        # Compute L2 norm of the gradient vector
         gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
 
         return gradient_magnitude
@@ -345,9 +343,9 @@ class VisualFootholdAdaptation:
         Returns:
             float: roughness (variance) cost
         """
-        delta = 0.03
+        delta = self.tamols_params.get('gradient_delta', 0.04) # Sampling spacing (3cm), covering a ~6x6cm patch
 
-        # Sample heights in a small patch
+        # Sample heights in a small 3x3 grid patch centered at candidate
         heights = []
         for i in range(-1, 2):
             for j in range(-1, 2):
@@ -359,7 +357,7 @@ class VisualFootholdAdaptation:
                     heights.append(h)
 
         if len(heights) < 5:
-            # Not enough data
+            # Not enough data to compute reliable variance
             return 0.5
 
         # Compute variance of heights
@@ -461,132 +459,6 @@ class VisualFootholdAdaptation:
 
         return cost
 
-    def _compute_swing_clearance_cost(self, candidate, seed, hip_position, heightmap):
-        """Cost for swing leg clearance - prevents collision with terrain during swing.
-
-        Samples multiple points along a straight-line swing path from current hip position
-        to candidate foothold and checks if the path would intersect terrain.
-        This helps avoid swing leg collisions with obstacles like step edges.
-
-        Args:
-            candidate: np.ndarray [x, y, z] candidate foothold in world frame
-            seed: np.ndarray [x, y, z] seed/reference foothold (approximates current foot position)
-            hip_position: np.ndarray [x, y, z] hip position in world frame
-            heightmap: HeightMap object for querying terrain height
-
-        Returns:
-            float: swing clearance cost (lower is better)
-        """
-        swing_margin = self.tamols_params.get('swing_safety_margin', 0.05)
-        n_samples = self.tamols_params.get('swing_path_samples', 10)
-
-        # Ensure at least 2 samples to avoid division by zero
-        if n_samples < 2:
-            n_samples = 2
-
-        cost = 0.0
-
-        # Sample points along a straight-line path from seed (current foot) to candidate
-        # We approximate the swing as a straight line in 3D from current position to target
-        # In reality, swing has an arc, but straight line is conservative for collision check
-        for i in range(n_samples):
-            alpha = i / (n_samples - 1)
-
-            # Linear interpolation along swing path
-            # We sample from seed to candidate (foot trajectory)
-            path_point = seed + alpha * (candidate - seed)
-
-            # Query terrain height at this XY location
-            terrain_height = heightmap.get_height(path_point[:2])
-
-            if terrain_height is not None:
-                # Check clearance: foot height - terrain height
-                clearance = path_point[2] - terrain_height
-
-                if clearance < swing_margin:
-                    # Insufficient clearance - penalize quadratically
-                    violation = swing_margin - clearance
-                    cost += violation ** 2
-
-        return cost
-
-    def _estimate_terrain_roughness(self, heightmaps, reference_footholds, legs_order):
-        """Estimate overall terrain roughness for adaptive step height.
-
-        Samples heightmap around each reference foothold and computes
-        an aggregate roughness metric (mean of local variances).
-
-        Args:
-            heightmaps: Dict of HeightMap objects per leg
-            reference_footholds: Dict of reference foothold positions per leg
-            legs_order: List of leg names to process
-
-        Returns:
-            float: estimated terrain roughness (higher = more rough)
-        """
-        roughness_values = []
-
-        for leg_name in legs_order:
-            heightmap = heightmaps[leg_name]
-            foothold = reference_footholds[leg_name]
-
-            # Sample heights in a patch around the foothold
-            # Use configurable sampling distance (default 5cm)
-            delta = self.tamols_params.get('roughness_sampling_distance', 0.05)
-            heights = []
-
-            for i in range(-2, 3):
-                for j in range(-2, 3):
-                    query_pos = foothold.copy()
-                    query_pos[0] += i * delta
-                    query_pos[1] += j * delta
-                    # Pass 2D coordinates to get_height (consistent with other uses)
-                    h = heightmap.get_height(query_pos[:2])
-                    if h is not None:
-                        heights.append(h)
-
-            # Need at least 40% of samples (10 out of 25) for reliable estimate
-            min_samples = max(10, int(0.4 * 25))
-            if len(heights) >= min_samples:
-                # Compute local variance as roughness measure
-                local_roughness = np.var(heights)
-                roughness_values.append(local_roughness)
-
-        if len(roughness_values) > 0:
-            # Return mean roughness across all legs
-            return np.mean(roughness_values)
-        else:
-            return 0.0
-
-    def get_adaptive_step_height(self, base_step_height):
-        """Get adaptive step height based on terrain roughness.
-
-        Dynamically adjusts swing step height based on local terrain difficulty
-        to avoid swing leg collisions with terrain features.
-
-        Args:
-            base_step_height: float, base/nominal step height [m]
-
-        Returns:
-            float: adjusted step height [m]
-        """
-        if not self.adaptation_strategy == 'tamols':
-            return base_step_height
-
-        if not self.tamols_params.get('adaptive_step_height', True):
-            return base_step_height
-
-        if not hasattr(self, 'current_terrain_roughness'):
-            return base_step_height
-
-        # Get parameters
-        gain = self.tamols_params.get('step_height_gain', 0.5)
-        max_multiplier = self.tamols_params.get('max_step_height_multiplier', 2.0)
-
-        # Adaptive height = base + roughness * gain
-        adaptive_height = base_step_height + self.current_terrain_roughness * gain
-
-        # Clamp to maximum
         max_height = base_step_height * max_multiplier
         adaptive_height = min(adaptive_height, max_height)
 
