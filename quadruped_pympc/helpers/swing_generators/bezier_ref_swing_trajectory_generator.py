@@ -279,7 +279,7 @@ class SwingTrajectoryGenerator:
         
         fig = plt.figure()
         ax = fig.add_subplot(111, projection="3d")
-        ax.plot(curve_points[:, 0], curve_points[:, 1], curve_points[:, 2])
+        ax.plot(curve_points[:, 0], curve_points[:, 1], curve_points[:, 2], label="Swing Trajectory")
         ax.set_xlabel('X')
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
