@@ -32,7 +32,7 @@ Penalizes deviation of candidate foothold from a default foot location derived f
 - Thigh position (hip position)
 - Nominal leg extension direction
 - Blending of world z-axis and local terrain plane normal
-- Velocity feedback term (if available)
+- *Note: Velocity feedback term (Eq. 3-4) requires thigh velocity, which is not currently available in the interface. This is a future enhancement.*
 
 ### 2. Foothold Score (Eq. 5)
 **Weight:** `weight_foothold_score` (default: 0.8)
@@ -188,6 +188,22 @@ Paper: "Perceptive Locomotion in Rough Terrain – Online Foothold Optimization"
 - **Objective normalization:** Each objective term is scaled to comparable magnitude
 - **Previous optimal tracking:** Stored per-leg in `self.previous_optimal_footholds`
 - **Contact-aware:** Push-over regularizer only applies to swinging legs
+
+## Known Limitations
+
+1. **Velocity feedback term (Eq. 3-4):** The paper's velocity feedback term in the default leg configuration objective requires thigh velocity, which is not currently available in the interface. The current implementation uses static thigh position only. Future enhancement would integrate thigh velocity for improved tracking of moving targets during dynamic maneuvers.
+
+2. **Terrain normal blending:** The implementation uses a simplified downward leg extension direction. The paper blends world z-axis with local terrain plane normal using parameter κ (kappa). This could be enhanced to compute and blend terrain normals.
+
+3. **Contact schedule timing:** The implementation uses current contact state. The paper discusses predicting thigh positions at lift-off and touch-down using contact schedule timing. This could be integrated when precise schedule timing is available.
+
+## Future Enhancements
+
+- Integrate thigh velocity for velocity feedback term (Eq. 3-4)
+- Implement terrain normal estimation and blending (κ parameter)
+- Add contact schedule timing predictions for lift-off/touch-down positions
+- Optimize candidate generation with spatial indexing for large heightmaps
+- Add visualization of selected footholds and rejected candidates for debugging
 
 ## Troubleshooting
 
