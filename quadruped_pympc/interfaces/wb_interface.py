@@ -228,14 +228,14 @@ class WBInterface:
 
         # Adjust the footholds given the terrain -----------------------------------------------------
         if cfg.simulation_params['visual_foothold_adaptation'] != 'blind':
-            time_adaptation = time.time()
-            if self.stc.check_apex_condition(self.current_contact, interval=0.01) and self.vfa.initialized == False:
-                for leg_id, leg_name in enumerate(legs_order):
+            if self.stc.check_apex_condition(self.current_contact, interval=0.01) and not self.vfa.initialized:
+                for _leg_id, leg_name in enumerate(legs_order):
                     heightmaps[leg_name].update_height_map(ref_feet_pos[leg_name], yaw=base_ori_euler_xyz[2])
                 self.vfa.compute_adaptation(
-                    legs_order, ref_feet_pos, hip_pos, heightmaps, base_lin_vel, base_ori_euler_xyz, base_ang_vel
+                    legs_order, ref_feet_pos, hip_pos, heightmaps, base_lin_vel, base_ori_euler_xyz, base_ang_vel,
+                    feet_positions=feet_pos,  # Pass current measured foot positions for TAMOLS
+                    contact_state=self.current_contact  # Pass contact state for TAMOLS
                 )
-                # print("Adaptation time: ", time.time() - time_adaptation)
 
             if self.stc.check_full_stance_condition(self.current_contact):
                 self.vfa.reset()

@@ -211,27 +211,35 @@ simulation_params = {
         # Candidate generation parameters
         'search_radius': 0.35,           # [m] radius around seed foothold to search
         'search_resolution': 0.04,       # [m] grid step size for candidate sampling
-        'patch_size': 3,                 # number of neighboring heightmap points to sample for gradient estimation
-        'gradient_delta': 0.04,          # [m] offset for finite difference gradient estimation = search_resolution
-        # Cost function weights (higher = more penalty)
-        # Aligned with TAMOLS reference implementation (ianpedroza/tamols-rl)
-        'weight_edge_avoidance': 15.0,         # from tamols/costs.py:add_edge_avoidance_cost
-        'weight_roughness': 10.0,              # terrain roughness/irregularity  
-        'weight_previous_solution': 2,     # from tamols/costs.py:add_previous_solution_cost (deviation from seed)
-        'weight_kinematic': 10.0,             # from tamols/constraints.py:add_kinematic_constraints
-        'weight_nominal_kinematic': 1.0,     # from tamols/costs.py:add_nominal_kinematic_cost (GIA: maintains hip height)
-        'weight_reference_tracking': 5.0,     # from tamols/costs.py:add_tracking_cost (GIA: tracks velocity, prevents standing still)
-
-        # Nominal kinematic parameters
-        'h_des': hip_height,                        # [m] desired hip height for nominal kinematics (go1/go2: 0.25, aliengo: 0.30)
-
-        # Kinematic reachability constraints (robot-specific, in meters)
-        # Distance from hip to foothold must be in [l_min, l_max]
-        'l_min': {'go1': 0.15, 'go2': 0.15, 'aliengo': 0.18, 'b2': 0.25, 
-                  'hyqreal1': 0.25, 'hyqreal2': 0.25, 'mini_cheetah': 0.12, 'spot': 0.20},
-        'l_max': {'go1': 0.45, 'go2': 0.45, 'aliengo': 0.55, 'b2': 0.75, 
-                  'hyqreal1': 0.75, 'hyqreal2': 0.75, 'mini_cheetah': 0.40, 'spot': 0.60},
-
+        'use_local_window': True,        # Use local window (efficient) vs full heightmap scan
+        'gradient_delta': 0.04,          # [m] offset for finite difference gradient estimation
+        
+        # Paper-based objective weights (descending importance order as in paper)
+        # Objective 1: Default leg configuration (Eq. 2-4)
+        'weight_default_config': 1.0,    # Penalize deviation from nominal foothold
+        # Objective 2: Foothold score (Eq. 5): terrain quality
+        'weight_foothold_score': 0.8,    # Edges, slopes, roughness
+        # Objective 3: Push-over regularizer (Eq. 6)
+        'weight_pushover': 0.6,          # Max terrain score along trajectory (swinging legs only)
+        # Objective 4: Support area (Eq. 7)
+        'weight_support_area': 0.4,      # Encourage larger support polygon
+        # Objective 5: Previous foothold continuity (Eq. 8)
+        'weight_continuity': 0.2,        # Penalize deviation from previous optimal
+        # Objective 6: Leg over-extension (Eq. 9)
+        'weight_leg_extension': 0.1,     # Regularize leg extension
+        
+        # Paper constraint thresholds
+        'h_max': 0.15,                   # [m] Max step height for obstacle constraint (Eq. 10)
+        'd_min': 0.10,                   # [m] Min distance between legs for collision constraint (Eq. 11)
+        
+        # Sampling parameters for line-based evaluations
+        'pushover_line_samples': 10,     # Number of samples along line for push-over regularizer
+        'obstacle_line_samples': 10,     # Number of samples along line for obstacle height constraint
+        
+        # Nominal kinematics parameters
+        'l_nom': hip_height,             # [m] Nominal leg extension for default configuration
+        'kappa': 0.5,                    # Blending factor for terrain normal (0=world z, 1=terrain normal)
+        
         # Foothold constraint box size (for MPC foothold constraints)
         'constraint_box_dx': 0.05,       # [m] +/- x constraint around chosen foothold
         'constraint_box_dy': 0.05,       # [m] +/- y constraint around chosen foothold
