@@ -15,7 +15,9 @@ class SwingTrajectoryController:
         if self.generator == "scipy":
             from .swing_generators.scipy_swing_trajectory_generator import SwingTrajectoryGenerator
             self.swing_generator = SwingTrajectoryGenerator(swing_period=swing_period, step_height=step_height)
-        
+        elif self.generator == "bezier_ref":
+            from .swing_generators.bezier_ref_swing_trajectory_generator import SwingTrajectoryGenerator
+            self.swing_generator = SwingTrajectoryGenerator(swing_period=swing_period, step_height=step_height)
         else:
             from .swing_generators.explicit_swing_trajectory_generator import SwingTrajectoryGenerator
             self.swing_generator = SwingTrajectoryGenerator(swing_period=swing_period, step_height=step_height)
@@ -34,7 +36,9 @@ class SwingTrajectoryController:
         if self.generator == "scipy":
             from .swing_generators.scipy_swing_trajectory_generator import SwingTrajectoryGenerator
             self.swing_generator = SwingTrajectoryGenerator(swing_period=swing_period, step_height=step_height)
-        
+        elif self.generator == "bezier_ref":
+            from .swing_generators.bezier_ref_swing_trajectory_generator import SwingTrajectoryGenerator
+            self.swing_generator = SwingTrajectoryGenerator(swing_period=swing_period, step_height=step_height)
         else:
             from .swing_generators.explicit_swing_trajectory_generator import SwingTrajectoryGenerator
             self.swing_generator = SwingTrajectoryGenerator(swing_period=swing_period, step_height=step_height)
