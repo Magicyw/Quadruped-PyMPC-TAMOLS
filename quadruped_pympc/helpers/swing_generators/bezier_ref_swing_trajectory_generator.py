@@ -28,6 +28,8 @@ Given the constraints v(T)=0 and a(T)=0, we get:
 The midpoint constraint p_z(T/2) determines P3_z, and we set P3_xy to the midpoint.
 """
 
+from typing import Tuple
+
 import numpy as np
 
 # Optional matplotlib import for plotting
@@ -186,7 +188,7 @@ class SwingTrajectoryGenerator:
     
     def _evaluate_bezier_curve(
         self, s: float, control_points: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Evaluate position, velocity (w.r.t. s), and acceleration (w.r.t. s) at parameter s.
         
@@ -224,7 +226,7 @@ class SwingTrajectoryGenerator:
         touch_down: np.ndarray,
         early_stance_hitmoment=-1,
         early_stance_hitpoint=None
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Compute desired foot position, velocity, and acceleration at the given swing time.
         
