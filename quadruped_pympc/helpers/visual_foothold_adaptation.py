@@ -231,10 +231,8 @@ class VisualFootholdAdaptation:
         Returns:
             List of candidate [x, y] positions
         """
-        # If heightmap has data, use local window approach (efficient)
-        use_local_window = self.tamols_params.get('use_local_window', True)
-        
-        if heightmap is not None and heightmap.data is not None and not use_local_window:
+        # If heightmap has data, optionally use local window approach (efficient)
+        if heightmap is not None and heightmap.data is not None and not self.tamols_params.get('use_local_window', True):
             # Full heightmap scan (slower, for debugging/comparison)
             candidates = []
             rows, cols = heightmap.data.shape[:2]
@@ -416,8 +414,9 @@ class VisualFootholdAdaptation:
         deviation = np.linalg.norm(candidate - default_foothold)
         cost = deviation ** 2
         
-        # TODO: Add velocity feedback term if thigh velocity is available
-        # Paper Eq. 3-4: includes velocity error term
+        # Note: Velocity feedback term from paper Eq. 3-4 would require thigh velocity
+        # (not currently available in interface). This is a future enhancement that would
+        # improve tracking of moving targets during dynamic maneuvers.
         
         return cost
 

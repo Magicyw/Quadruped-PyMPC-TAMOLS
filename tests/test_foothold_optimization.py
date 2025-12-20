@@ -50,7 +50,7 @@ class MockHeightMap:
 class MockLegsAttr:
     """Mock LegsAttr for testing."""
     
-    def __init__(self, FL, FR, RL, RR):
+    def __init__(self, FL, FR, RL, RR):  # noqa: N803
         self.FL = FL
         self.FR = FR
         self.RL = RL
@@ -189,13 +189,8 @@ class TestIntegration:
 
 
 def test_import():
-    """Test that module can be imported."""
-    try:
-        # Note: This will fail without dependencies installed
-        # from quadruped_pympc.helpers.visual_foothold_adaptation import VisualFootholdAdaptation
-        pass
-    except ImportError:
-        pytest.skip("Dependencies not installed")
+    """Test that module can be imported (requires dependencies)."""
+    pytest.skip("Test requires gym_quadruped and other dependencies to be installed")
 
 
 if __name__ == "__main__":
