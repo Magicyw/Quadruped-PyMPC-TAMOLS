@@ -112,10 +112,10 @@ class SwingTrajectoryGenerator:
         # 64*p_z(0.5) = 22*P0_z + 20*P3_z + 22*P6_z
         # P3_z = (64*p_z(0.5) - 22*P0_z - 22*P6_z) / 20
         
-        P3_z = (64 * z_mid - 22 * p0[2] - 22 * pf[2]) / 20
+        p3_z = (64 * z_mid - 22 * p0[2] - 22 * pf[2]) / 20
         
         # Set P3 with midpoint x,y and computed z
-        control_points[3] = np.array([p_mid_xy[0], p_mid_xy[1], P3_z])
+        control_points[3] = np.array([p_mid_xy[0], p_mid_xy[1], p3_z])
         
         return control_points
         
@@ -207,13 +207,13 @@ class SwingTrajectoryGenerator:
         
         # Sum over all control points
         for i in range(7):  # 0 to 6 for degree 6
-            B_i = self._bernstein_basis(s, i, n)
-            dB_i = self._bernstein_basis_derivative(s, i, n)
-            d2B_i = self._bernstein_basis_second_derivative(s, i, n)
+            b_i = self._bernstein_basis(s, i, n)
+            db_i = self._bernstein_basis_derivative(s, i, n)
+            d2b_i = self._bernstein_basis_second_derivative(s, i, n)
             
-            position += B_i * control_points[i]
-            velocity_s += dB_i * control_points[i]
-            acceleration_s += d2B_i * control_points[i]
+            position += b_i * control_points[i]
+            velocity_s += db_i * control_points[i]
+            acceleration_s += d2b_i * control_points[i]
         
         return position, velocity_s, acceleration_s
     
@@ -301,16 +301,16 @@ class SwingTrajectoryGenerator:
             return
             
         time_points = np.array(tp)
-        footPosDes_points = np.array(fp)
-        footVelDes_points = np.array(vp)
-        footAccDes_points = np.array(ap)
+        foot_pos_des_points = np.array(fp)
+        foot_vel_des_points = np.array(vp)
+        foot_acc_des_points = np.array(ap)
         
         # Create subplots for position, velocity, and acceleration
         fig, axs = plt.subplots(3, 1, figsize=(8, 12))
         
         # Plot position
         for i, label in enumerate(['X', 'Y', 'Z']):
-            axs[0].plot(time_points, footPosDes_points[:, i], label=f"Position {label}")
+            axs[0].plot(time_points, foot_pos_des_points[:, i], label=f"Position {label}")
         axs[0].set_xlabel('Time (s)')
         axs[0].set_ylabel('Position (m)')
         axs[0].legend()
@@ -318,7 +318,7 @@ class SwingTrajectoryGenerator:
         
         # Plot velocity
         for i, label in enumerate(['X', 'Y', 'Z']):
-            axs[1].plot(time_points, footVelDes_points[:, i], label=f"Velocity {label}")
+            axs[1].plot(time_points, foot_vel_des_points[:, i], label=f"Velocity {label}")
         axs[1].set_xlabel('Time (s)')
         axs[1].set_ylabel('Velocity (m/s)')
         axs[1].legend()
@@ -326,7 +326,7 @@ class SwingTrajectoryGenerator:
         
         # Plot acceleration
         for i, label in enumerate(['X', 'Y', 'Z']):
-            axs[2].plot(time_points, footAccDes_points[:, i], label=f"Acceleration {label}")
+            axs[2].plot(time_points, foot_acc_des_points[:, i], label=f"Acceleration {label}")
         axs[2].set_xlabel('Time (s)')
         axs[2].set_ylabel('Acceleration (m/s²)')
         axs[2].legend()
@@ -353,7 +353,7 @@ if __name__ == "__main__":
     lift_off = np.array([0.0, 0.0, 0.0])
     touch_down = np.array([0.2, 0.0, 0.0])
     
-    print(f"\nTest Case 1: Horizontal Movement")
+    print("\nTest Case 1: Horizontal Movement")
     print(f"Lift-off: {lift_off}")
     print(f"Touch-down: {touch_down}")
     print(f"Step height: {step_height}")
@@ -397,21 +397,21 @@ if __name__ == "__main__":
     pos_end_error = np.linalg.norm(position_points[-1] - touch_down)
     print(f"   p(0) = {position_points[0]}, expected {lift_off}, error: {pos_start_error:.6e}")
     print(f"   p(T) = {position_points[-1]}, expected {touch_down}, error: {pos_end_error:.6e}")
-    print(f"   ✓ PASS" if pos_start_error < tolerance and pos_end_error < tolerance else f"   ✗ FAIL")
+    print("   ✓ PASS" if pos_start_error < tolerance and pos_end_error < tolerance else "   ✗ FAIL")
     
     print("\n2. Velocity Boundary Conditions:")
     vel_start_norm = np.linalg.norm(velocity_points[0])
     vel_end_norm = np.linalg.norm(velocity_points[-1])
     print(f"   v(0) = {velocity_points[0]}, norm: {vel_start_norm:.6e}")
     print(f"   v(T) = {velocity_points[-1]}, norm: {vel_end_norm:.6e}")
-    print(f"   ✓ PASS" if vel_start_norm < tolerance and vel_end_norm < tolerance else f"   ✗ FAIL")
+    print("   ✓ PASS" if vel_start_norm < tolerance and vel_end_norm < tolerance else "   ✗ FAIL")
     
     print("\n3. Acceleration Boundary Conditions:")
     acc_start_norm = np.linalg.norm(acceleration_points[0])
     acc_end_norm = np.linalg.norm(acceleration_points[-1])
     print(f"   a(0) = {acceleration_points[0]}, norm: {acc_start_norm:.6e}")
     print(f"   a(T) = {acceleration_points[-1]}, norm: {acc_end_norm:.6e}")
-    print(f"   ✓ PASS" if acc_start_norm < tolerance and acc_end_norm < tolerance else f"   ✗ FAIL")
+    print("   ✓ PASS" if acc_start_norm < tolerance and acc_end_norm < tolerance else "   ✗ FAIL")
     
     print("\n4. Midpoint Height Constraint:")
     mid_idx = len(time_points) // 2
@@ -419,7 +419,7 @@ if __name__ == "__main__":
     z_mid_expected = max(lift_off[2], touch_down[2]) + step_height
     z_mid_error = abs(z_mid_actual - z_mid_expected)
     print(f"   p_z(T/2) = {z_mid_actual:.6f}, expected: {z_mid_expected:.6f}, error: {z_mid_error:.6e}")
-    print(f"   ✓ PASS" if z_mid_error < 1e-3 else f"   ✗ FAIL")
+    print("   ✓ PASS" if z_mid_error < 1e-3 else "   ✗ FAIL")
     
     print("\n5. Trajectory Statistics:")
     print(f"   Max height: {np.max(position_points[:, 2]):.6f} m")
