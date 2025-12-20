@@ -23,6 +23,9 @@ from quadruped_pympc.helpers.quadruped_utils import plot_swing_mujoco
 # PyMPC controller imports
 from quadruped_pympc.quadruped_pympc_wrapper import QuadrupedPyMPC_Wrapper
 
+# Scene loading utilities
+from simulation.scene_loader import load_scene_for_quadruped_env
+
 
 def run_simulation(
     qpympc_cfg,
@@ -47,13 +50,23 @@ def run_simulation(
     scene_name = qpympc_cfg.simulation_params["scene"]
     simulation_dt = qpympc_cfg.simulation_params["dt"]
 
+    # Load scene configuration (handles stepping stones and custom terrains)
+    stepping_stones_params = qpympc_cfg.simulation_params.get("stepping_stones_params", None)
+    scene_arg, custom_scene_path = load_scene_for_quadruped_env(scene_name, stepping_stones_params)
+    
+    if custom_scene_path:
+        print(f"Loading custom scene from: {custom_scene_path}")
+
     # Save all observables available.
     state_obs_names = [] #list(QuadrupedEnv.ALL_OBS)  # + list(IMU.ALL_OBS)
 
     # Create the quadruped robot environment -----------------------------------------------------------
+    # Note: gym_quadruped may need the scene parameter to be a path for custom scenes
+    # If it doesn't support custom paths directly, you may need to modify gym_quadruped
+    # or copy the XML to gym_quadruped's scene directory
     env = QuadrupedEnv(
         robot=robot_name,
-        scene=scene_name,
+        scene=scene_arg,  # This will be either a built-in name or a path
         sim_dt=simulation_dt,
         ref_base_lin_vel=np.asarray(ref_base_lin_vel) * hip_height,  # pass a float for a fixed value
         ref_base_ang_vel=ref_base_ang_vel,  # pass a float for a fixed value
