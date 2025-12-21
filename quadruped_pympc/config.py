@@ -235,6 +235,14 @@ simulation_params = {
         # Foothold constraint box size (for MPC foothold constraints)
         'constraint_box_dx': 0.05,       # [m] +/- x constraint around chosen foothold
         'constraint_box_dy': 0.05,       # [m] +/- y constraint around chosen foothold
+
+        # Joint (multi-leg) foothold selection parameters
+        # When enabled, TAMOLS selects footholds jointly for multiple legs (e.g., diagonal pairs in trot)
+        # to ensure stability constraints are satisfied with margin
+        'joint_optimize': True,          # Enable joint foothold optimization across multiple legs
+        'top_k_per_leg': 15,             # Number of top candidates per leg for joint evaluation
+        'stability_margin': 0.02,        # [m] Safety margin for stability constraints (same as NMPC default)
+        'joint_weight_stability': 1000.0,  # Weight for stability constraint violations in joint cost
     },
 
     # this is the integration time used in the simulator

@@ -64,6 +64,7 @@ class VisualFootholdAdaptation:
         forward_vel,
         base_orientation,
         base_orientation_rate,
+        base_position=None,
     ):
         for leg_id, leg_name in enumerate(legs_order):
             if heightmaps[leg_name].data is None:
@@ -123,66 +124,86 @@ class VisualFootholdAdaptation:
             self.forward_vel = forward_vel
             # TAMOLS-inspired foothold adaptation strategy
             # Performs local search around seed footholds using terrain-aware cost metrics
+            #
+            # New: Joint foothold selection for stability-aware adaptation
+            # This aligns with NMPC stability constraints (create_stability_constraints)
+            # by selecting footholds jointly for groups of legs (e.g., diagonal pairs in trot)
 
-            for leg_id, leg_name in enumerate(legs_order):
-                seed_foothold = reference_footholds[leg_name].copy()
-                hip_position = hip_positions[leg_name]
-                heightmap = heightmaps[leg_name]
+            # Try joint optimization if base_position is available
+            joint_success = False
+            if base_position is not None:
+                joint_success = self._apply_joint_foothold_selection(
+                    legs_order,
+                    reference_footholds,
+                    hip_positions,
+                    heightmaps,
+                    base_position,
+                    base_orientation,
+                    forward_vel,
+                )
 
-                # Generate candidate footholds around the seed
-                candidates = self._generate_candidates(seed_foothold)
+            # Fall back to single-leg optimization if joint optimization disabled or failed
+            if not joint_success:
+                for leg_id, leg_name in enumerate(legs_order):
+                    seed_foothold = reference_footholds[leg_name].copy()
+                    hip_position = hip_positions[leg_name]
+                    heightmap = heightmaps[leg_name]
 
-                # Evaluate each candidate using TAMOLS-inspired cost metrics
-                best_candidate = None
-                best_score = float('inf')
+                    # Generate candidate footholds around the seed
+                    candidates = self._generate_candidates(seed_foothold, heightmap)
 
-                for candidate_xy in candidates:
-                    # Query height from heightmap
-                    candidate = np.array([candidate_xy[0], candidate_xy[1], 0.0])
-                    height = heightmap.get_height(candidate)
-                    if height is None:
-                        continue  # Skip if heightmap query fails
+                    # Evaluate each candidate using TAMOLS-inspired cost metrics
+                    best_candidate = None
+                    best_score = float('inf')
 
-                    candidate[2] = height
+                    for candidate_xy in candidates:
+                        # Query height from heightmap
+                        candidate = np.array([candidate_xy[0], candidate_xy[1], 0.0])
+                        height = heightmap.get_height(candidate)
+                        if height is None:
+                            continue  # Skip if heightmap query fails
 
-                    # Compute TAMOLS-inspired cost
-                    score = self._compute_tamols_score(
-                        candidate, seed_foothold, hip_position, heightmap
-                    )
+                        candidate[2] = height
 
-                    if score < best_score:
-                        best_score = score
-                        best_candidate = candidate
+                        # Compute TAMOLS-inspired cost
+                        score = self._compute_tamols_score(
+                            candidate, seed_foothold, hip_position, heightmap
+                        )
 
-                # Use best candidate if found, otherwise keep seed
-                if best_candidate is not None:
-                    reference_footholds[leg_name] = best_candidate
+                        if score < best_score:
+                            best_score = score
+                            best_candidate = candidate
 
-                    # Create foothold constraints (simple box around chosen foothold)
-                    dx = self.tamols_params.get('constraint_box_dx', 0.05)
-                    dy = self.tamols_params.get('constraint_box_dy', 0.05)
-                    vertex1 = best_candidate.copy()
-                    vertex1[0] -= dx
-                    vertex1[1] -= dy
-                    vertex2 = best_candidate.copy()
-                    vertex2[0] += dx
-                    vertex2[1] += dy
-                    self.footholds_constraints[leg_name] = [vertex1, vertex2]
-                else:
-                    # Fallback to height adjustment only
-                    height_adjustment = heightmap.get_height(seed_foothold)
-                    if height_adjustment is not None:
-                        reference_footholds[leg_name][2] = height_adjustment
+                    # Use best candidate if found, otherwise keep seed
+                    if best_candidate is not None:
+                        reference_footholds[leg_name] = best_candidate
+
+                        # Create foothold constraints (simple box around chosen foothold)
+                        dx = self.tamols_params.get('constraint_box_dx', 0.05)
+                        dy = self.tamols_params.get('constraint_box_dy', 0.05)
+                        vertex1 = best_candidate.copy()
+                        vertex1[0] -= dx
+                        vertex1[1] -= dy
+                        vertex2 = best_candidate.copy()
+                        vertex2[0] += dx
+                        vertex2[1] += dy
+                        self.footholds_constraints[leg_name] = [vertex1, vertex2]
+                    else:
+                        # Fallback to height adjustment only
+                        height_adjustment = heightmap.get_height(seed_foothold)
+                        if height_adjustment is not None:
+                            reference_footholds[leg_name][2] = height_adjustment
 
         self.update_footholds_adaptation(reference_footholds)
 
         return True
 
-    def _generate_candidates(self, seed_foothold):
+    def _generate_candidates(self, seed_foothold, heightmap=None):
         """Generate candidate footholds in a grid around the seed position.
 
         Args:
             seed_foothold: np.ndarray [x, y, z] seed foothold position in world frame
+            heightmap: HeightMap object (optional) for sampling from heightmap grid
 
         Returns:
             List of candidate [x, y] positions
@@ -458,6 +479,411 @@ class VisualFootholdAdaptation:
             cost = 0.0
 
         return cost
+
+    def _compute_stability_proxy(self, base_position, base_orientation, forward_vel=None):
+        """Compute proxy stability point in horizontal frame.
+
+        This matches the NMPC stability constraint implementation in
+        create_stability_constraints() which uses either COM projection (static)
+        or ZMP (dynamic) in the horizontal (yaw-rotated) frame.
+
+        Args:
+            base_position: np.ndarray [x, y, z] base position in world frame
+            base_orientation: np.ndarray [roll, pitch, yaw] base orientation
+            forward_vel: np.ndarray [vx, vy, vz] base velocity in world frame (optional)
+
+        Returns:
+            np.ndarray [x, y]: stability point in horizontal frame relative to base (0, 0)
+        """
+        # Default: use static stability (COM projection at base origin in horizontal frame)
+        # This matches: if self.use_static_stability: x = 0.0, y = 0.0
+        # For conservative adaptation, we use the static case
+        # A future extension could add dynamic proxy based on velocity
+        return np.array([0.0, 0.0])
+
+    def _evaluate_stability_constraints(self, foothold_positions, stability_point, margin=0.02):
+        """Evaluate NMPC-like stability constraints for a set of footholds.
+
+        This implements the same inequality structure as create_stability_constraints()
+        in centroidal_nmpc_nominal.py. The constraints enforce that the stability point
+        (x, y) stays inside the support polygon/line formed by the footholds.
+
+        The constraint inequalities are:
+        - FL-FR edge: x <= (x_FR - x_FL) * (y - y_FL) / (y_FR - y_FL + eps) + x_FL
+        - FR-RR edge: y >= (y_RR - y_FR) * (x - x_FR) / (x_RR - x_FR + eps) + y_FR
+        - RR-RL edge: x >= (x_RL - x_RR) * (y - y_RR) / (y_RL - y_RR + eps) + x_RR
+        - RL-FL edge: y <= (y_FL - y_RL) * (x - x_RL) / (x_FL - x_RL + eps) + y_RL
+        - FL-RR diagonal: y >= (y_RR - y_FL) * (x - x_FL) / (x_RR - x_FL + eps) + y_FL
+        - FR-RL diagonal: y >= (y_RL - y_FR) * (x - x_FR) / (x_RL - x_FR + eps) + y_FR
+
+        Args:
+            foothold_positions: dict with keys 'FL', 'FR', 'RL', 'RR' containing
+                               np.ndarray [x, y] positions in horizontal frame relative to base
+            stability_point: np.ndarray [x, y] stability point in horizontal frame
+            margin: float, safety margin (positive = shrink polygon inward)
+
+        Returns:
+            float: total constraint violation (0 if all constraints satisfied, positive if violated)
+        """
+        eps = 0.001  # Small epsilon to avoid division by zero (same as NMPC)
+        x, y = stability_point
+
+        # Extract foothold positions
+        x_FL, y_FL = foothold_positions['FL']
+        x_FR, y_FR = foothold_positions['FR']
+        x_RL, y_RL = foothold_positions['RL']
+        x_RR, y_RR = foothold_positions['RR']
+
+        # Compute constraint values (same as NMPC create_stability_constraints)
+        # For each constraint, negative/zero means satisfied, positive means violated
+
+        # FL-FR edge: x <= ... or equivalently: x - ... <= 0
+        constraint_FL_FR = x - (x_FR - x_FL) * (y - y_FL) / (y_FR - y_FL + eps) - x_FL
+        # Upper bound is 0, so violation is max(constraint_FL_FR + margin, 0)
+        violation_FL_FR = max(constraint_FL_FR + margin, 0.0)
+
+        # FR-RR edge: y >= ... or equivalently: ... - y <= 0
+        constraint_FR_RR = (y_RR - y_FR) * (x - x_FR) / (x_RR - x_FR + eps) + y_FR - y
+        # Lower bound is 0, so violation is max(constraint_FR_RR + margin, 0)
+        violation_FR_RR = max(constraint_FR_RR + margin, 0.0)
+
+        # RR-RL edge: x >= ... or equivalently: ... - x <= 0
+        constraint_RR_RL = (x_RL - x_RR) * (y - y_RR) / (y_RL - y_RR + eps) + x_RR - x
+        # Lower bound is 0, so violation is max(constraint_RR_RL + margin, 0)
+        violation_RR_RL = max(constraint_RR_RL + margin, 0.0)
+
+        # RL-FL edge: y <= ... or equivalently: y - ... <= 0
+        constraint_RL_FL = y - (y_FL - y_RL) * (x - x_RL) / (x_FL - x_RL + eps) - y_RL
+        # Upper bound is 0, so violation is max(constraint_RL_FL + margin, 0)
+        violation_RL_FL = max(constraint_RL_FL + margin, 0.0)
+
+        # FL-RR diagonal: y >= ... (for trot/diagonal support)
+        constraint_FL_RR = (y_RR - y_FL) * (x - x_FL) / (x_RR - x_FL + eps) + y_FL - y
+        violation_FL_RR = max(constraint_FL_RR + margin, 0.0)
+
+        # FR-RL diagonal: y >= ... (for trot/diagonal support)
+        constraint_FR_RL = (y_RL - y_FR) * (x - x_FR) / (x_RL - x_FR + eps) + y_FR - y
+        violation_FR_RL = max(constraint_FR_RL + margin, 0.0)
+
+        # Total violation (sum of all constraint violations)
+        total_violation = (
+            violation_FL_FR + violation_FR_RR + violation_RR_RL +
+            violation_RL_FL + violation_FL_RR + violation_FR_RL
+        )
+
+        return total_violation
+
+    def _transform_to_horizontal_frame(self, world_positions, base_position, base_yaw):
+        """Transform foot positions from world frame to horizontal (yaw-rotated) frame.
+
+        This matches the transformation in NMPC create_stability_constraints():
+        h_R_w = rotation matrix for yaw
+        foot_horizontal = h_R_w @ (foot_world - base_world)
+
+        Args:
+            world_positions: dict with keys 'FL', 'FR', 'RL', 'RR' containing
+                            np.ndarray [x, y, z] positions in world frame
+            base_position: np.ndarray [x, y, z] base position in world frame
+            base_yaw: float, base yaw angle in radians
+
+        Returns:
+            dict with keys 'FL', 'FR', 'RL', 'RR' containing
+            np.ndarray [x, y] positions in horizontal frame relative to base
+        """
+        # Rotation matrix for yaw (same as NMPC)
+        cos_yaw = np.cos(base_yaw)
+        sin_yaw = np.sin(base_yaw)
+        h_R_w = np.array([[cos_yaw, sin_yaw],
+                          [-sin_yaw, cos_yaw]])
+
+        horizontal_positions = {}
+        for leg_name in ['FL', 'FR', 'RL', 'RR']:
+            # Transform to horizontal frame: h_R_w @ (foot_world - base_world)
+            foot_world_xy = world_positions[leg_name][:2]
+            base_world_xy = base_position[:2]
+            foot_horizontal_xy = h_R_w @ (foot_world_xy - base_world_xy)
+            horizontal_positions[leg_name] = foot_horizontal_xy
+
+        return horizontal_positions
+
+    def _determine_joint_leg_sets(self, legs_order, gait_type='trot'):
+        """Determine which leg sets should be jointly optimized.
+
+        For trot: diagonal pairs (FL-RR, FR-RL)
+        For pace: lateral pairs (FL-FR, RL-RR)
+        For crawl/full stance: all combinations or individual legs
+
+        Args:
+            legs_order: list of leg names
+            gait_type: str, gait type (default 'trot')
+
+        Returns:
+            list of tuples, each tuple contains leg names to jointly optimize
+        """
+        # For now, implement trot (diagonal pairs) as the primary use case
+        # Future extension: detect gait from config or parameters
+        gait = cfg.simulation_params.get('gait', 'trot')
+
+        if gait in ['trot', 'bound']:
+            # Diagonal pairs
+            return [('FL', 'RR'), ('FR', 'RL')]
+        elif gait == 'pace':
+            # Lateral pairs
+            return [('FL', 'FR'), ('RL', 'RR')]
+        elif gait in ['crawl', 'full_stance']:
+            # For crawl, optimize all legs together (or could do tripods)
+            return [('FL', 'FR', 'RL', 'RR')]
+        else:
+            # Default: diagonal pairs (trot-like)
+            return [('FL', 'RR'), ('FR', 'RL')]
+
+    def _joint_foothold_selection(
+        self,
+        legs_order,
+        reference_footholds,
+        hip_positions,
+        heightmaps,
+        base_position,
+        base_orientation,
+        forward_vel,
+    ):
+        """Perform joint (multi-leg) foothold selection using stability-aware cost.
+
+        This implements the core improvement: instead of optimizing each leg independently,
+        we select footholds jointly for groups of legs (e.g., diagonal pairs in trot)
+        to ensure the resulting support polygon/line keeps the stability point feasible.
+
+        Args:
+            legs_order: list of leg names
+            reference_footholds: LegsAttr with seed footholds
+            hip_positions: LegsAttr with hip positions
+            heightmaps: LegsAttr with heightmap objects
+            base_position: np.ndarray [x, y, z]
+            base_orientation: np.ndarray [roll, pitch, yaw]
+            forward_vel: np.ndarray [vx, vy, vz]
+
+        Returns:
+            LegsAttr with selected footholds, or None if joint selection fails
+        """
+        joint_optimize = self.tamols_params.get('joint_optimize', True)
+        if not joint_optimize:
+            return None  # Fall back to single-leg optimization
+
+        top_k = self.tamols_params.get('top_k_per_leg', 15)
+        stability_margin = self.tamols_params.get('stability_margin', 0.02)
+        stability_weight = self.tamols_params.get('joint_weight_stability', 1000.0)
+
+        # Determine which leg sets to jointly optimize
+        leg_sets = self._determine_joint_leg_sets(legs_order)
+
+        # Generate top-K candidates for each leg
+        leg_candidates = {}
+        leg_candidate_scores = {}
+
+        for leg_name in legs_order:
+            seed_foothold = reference_footholds[leg_name].copy()
+            hip_position = hip_positions[leg_name]
+            heightmap = heightmaps[leg_name]
+
+            # Generate candidates
+            candidates = self._generate_candidates(seed_foothold, heightmap)
+
+            # Evaluate each candidate using single-leg TAMOLS cost
+            scored_candidates = []
+            for candidate_xy in candidates:
+                candidate = np.array([candidate_xy[0], candidate_xy[1], 0.0])
+                height = heightmap.get_height(candidate)
+                if height is None:
+                    continue  # Skip if heightmap query fails
+
+                candidate[2] = height
+
+                # Check kinematic bounds
+                hip_to_foot = candidate - hip_position
+                distance = np.linalg.norm(hip_to_foot)
+                l_min = self.tamols_params.get('l_min', {}).get(self.robot_name, 0.15)
+                l_max = self.tamols_params.get('l_max', {}).get(self.robot_name, 0.45)
+                if distance < l_min or distance > l_max:
+                    continue  # Skip kinematically infeasible candidates
+
+                # Compute single-leg TAMOLS score
+                score = self._compute_tamols_score(
+                    candidate, seed_foothold, hip_position, heightmap
+                )
+                scored_candidates.append((score, candidate))
+
+            # Sort by score and keep top-K
+            scored_candidates.sort(key=lambda x: x[0])
+            top_candidates = scored_candidates[:top_k]
+
+            if len(top_candidates) == 0:
+                # No valid candidates for this leg, joint optimization cannot proceed
+                return None
+
+            leg_candidates[leg_name] = [c[1] for c in top_candidates]
+            leg_candidate_scores[leg_name] = [c[0] for c in top_candidates]
+
+        # Now evaluate combinations for each leg set
+        best_footholds = reference_footholds.copy()
+        base_yaw = base_orientation[2]
+
+        for leg_set in leg_sets:
+            # Evaluate all combinations of candidates for this leg set
+            best_combination = None
+            best_combination_cost = float('inf')
+
+            # Generate all combinations
+            if len(leg_set) == 2:
+                # Pair: evaluate K^2 combinations
+                leg_a, leg_b = leg_set
+                for i, cand_a in enumerate(leg_candidates[leg_a]):
+                    for j, cand_b in enumerate(leg_candidates[leg_b]):
+                        # Build candidate foothold positions
+                        candidate_footholds = {
+                            'FL': best_footholds['FL'],
+                            'FR': best_footholds['FR'],
+                            'RL': best_footholds['RL'],
+                            'RR': best_footholds['RR']
+                        }
+                        candidate_footholds[leg_a] = cand_a
+                        candidate_footholds[leg_b] = cand_b
+
+                        # Transform to horizontal frame
+                        horizontal_positions = self._transform_to_horizontal_frame(
+                            candidate_footholds, base_position, base_yaw
+                        )
+
+                        # Compute stability point proxy
+                        stability_point = self._compute_stability_proxy(
+                            base_position, base_orientation, forward_vel
+                        )
+
+                        # Evaluate stability constraints
+                        stability_violation = self._evaluate_stability_constraints(
+                            horizontal_positions, stability_point, stability_margin
+                        )
+
+                        # Combined cost: single-leg scores + stability penalty
+                        single_leg_cost = leg_candidate_scores[leg_a][i] + leg_candidate_scores[leg_b][j]
+                        total_cost = single_leg_cost + stability_weight * stability_violation
+
+                        if total_cost < best_combination_cost:
+                            best_combination_cost = total_cost
+                            best_combination = {leg_a: cand_a, leg_b: cand_b}
+
+            elif len(leg_set) == 4:
+                # All four legs: evaluate K^4 combinations (can be expensive, limit K)
+                limited_k = min(5, top_k)  # Limit to avoid combinatorial explosion
+                from itertools import product
+                for cand_combo in product(
+                    leg_candidates['FL'][:limited_k],
+                    leg_candidates['FR'][:limited_k],
+                    leg_candidates['RL'][:limited_k],
+                    leg_candidates['RR'][:limited_k]
+                ):
+                    candidate_footholds = {
+                        'FL': cand_combo[0],
+                        'FR': cand_combo[1],
+                        'RL': cand_combo[2],
+                        'RR': cand_combo[3]
+                    }
+
+                    # Transform to horizontal frame
+                    horizontal_positions = self._transform_to_horizontal_frame(
+                        candidate_footholds, base_position, base_yaw
+                    )
+
+                    # Compute stability point proxy
+                    stability_point = self._compute_stability_proxy(
+                        base_position, base_orientation, forward_vel
+                    )
+
+                    # Evaluate stability constraints
+                    stability_violation = self._evaluate_stability_constraints(
+                        horizontal_positions, stability_point, stability_margin
+                    )
+
+                    # Combined cost
+                    single_leg_cost = sum(
+                        leg_candidate_scores[leg_name][
+                            leg_candidates[leg_name].index(cand_combo[idx])
+                        ]
+                        for idx, leg_name in enumerate(['FL', 'FR', 'RL', 'RR'])
+                    )
+                    total_cost = single_leg_cost + stability_weight * stability_violation
+
+                    if total_cost < best_combination_cost:
+                        best_combination_cost = total_cost
+                        best_combination = {
+                            'FL': cand_combo[0],
+                            'FR': cand_combo[1],
+                            'RL': cand_combo[2],
+                            'RR': cand_combo[3]
+                        }
+
+            # Update best footholds with the selected combination
+            if best_combination is not None:
+                for leg_name, foothold in best_combination.items():
+                    best_footholds[leg_name] = foothold
+
+        return best_footholds
+
+    def _apply_joint_foothold_selection(
+        self,
+        legs_order,
+        reference_footholds,
+        hip_positions,
+        heightmaps,
+        base_position,
+        base_orientation,
+        forward_vel,
+    ):
+        """Apply joint foothold selection and update reference footholds.
+
+        This is a wrapper that calls _joint_foothold_selection and handles fallback.
+
+        Args:
+            legs_order: list of leg names
+            reference_footholds: LegsAttr with seed footholds (will be modified in place)
+            hip_positions: LegsAttr with hip positions
+            heightmaps: LegsAttr with heightmap objects
+            base_position: np.ndarray [x, y, z]
+            base_orientation: np.ndarray [roll, pitch, yaw]
+            forward_vel: np.ndarray [vx, vy, vz]
+
+        Returns:
+            bool: True if joint selection succeeded, False if fell back to single-leg
+        """
+        # Try joint selection
+        joint_footholds = self._joint_foothold_selection(
+            legs_order,
+            reference_footholds,
+            hip_positions,
+            heightmaps,
+            base_position,
+            base_orientation,
+            forward_vel,
+        )
+
+        if joint_footholds is not None:
+            # Update reference footholds with joint selection
+            for leg_name in legs_order:
+                reference_footholds[leg_name] = joint_footholds[leg_name]
+
+                # Create foothold constraints (simple box around chosen foothold)
+                dx = self.tamols_params.get('constraint_box_dx', 0.05)
+                dy = self.tamols_params.get('constraint_box_dy', 0.05)
+                vertex1 = joint_footholds[leg_name].copy()
+                vertex1[0] -= dx
+                vertex1[1] -= dy
+                vertex2 = joint_footholds[leg_name].copy()
+                vertex2[0] += dx
+                vertex2[1] += dy
+                self.footholds_constraints[leg_name] = [vertex1, vertex2]
+
+            return True
+
+        return False
 
         max_height = base_step_height * max_multiplier
         adaptive_height = min(adaptive_height, max_height)
