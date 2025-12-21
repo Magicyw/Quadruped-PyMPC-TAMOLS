@@ -376,15 +376,20 @@ class VisualFootholdAdaptation:
         """Estimate local terrain gradient magnitude (edge/slope risk).
 
         Uses finite differences over nearby heightmap queries to approximate gradient.
+        Distinguishes between acceptable slopes (for climbing) and dangerous edges/cliffs.
 
         Args:
             candidate: np.ndarray [x, y, z] position in world frame
             heightmap: HeightMap object
 
         Returns:
-            float: gradient magnitude cost
+            float: gradient magnitude cost (only penalizes steep edges, not gradual slopes)
         """
         delta = self.tamols_params.get('gradient_delta', 0.04)
+        # Slope threshold: gradients below this are considered acceptable slopes for climbing
+        # Above this threshold = dangerous edge/cliff that should be avoided
+        # Default ~0.7 corresponds to ~35 degrees, typical maximum climbable slope
+        slope_threshold = self.tamols_params.get('slope_threshold', 0.7)
 
         # Sample heights in a cross pattern (±x, ±y) around the candidate
         # P1: (x+d, y), P2: (x-d, y), P3: (x, y+d), P4: (x, y-d)
@@ -408,7 +413,13 @@ class VisualFootholdAdaptation:
         # Compute L2 norm of the gradient vector
         gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
 
-        return gradient_magnitude
+        # Only penalize gradients above the threshold (dangerous edges/cliffs)
+        # Gradual slopes below threshold have zero cost to allow climbing
+        if gradient_magnitude <= slope_threshold:
+            return 0.0
+        else:
+            # Penalize the excess gradient beyond the acceptable slope threshold
+            return gradient_magnitude - slope_threshold
 
     def _compute_roughness_cost(self, candidate, heightmap):
         """Estimate local terrain roughness (height variance).
@@ -851,7 +862,6 @@ class VisualFootholdAdaptation:
             elif len(leg_set) == 4:
                 # All four legs: evaluate K^4 combinations (can be expensive, limit K)
                 limited_k = min(5, top_k)  # Limit to avoid combinatorial explosion
-                from itertools import product
                 
                 # Use enumeration to avoid .index() calls
                 for i_fl, cand_fl in enumerate(leg_candidates['FL'][:limited_k]):

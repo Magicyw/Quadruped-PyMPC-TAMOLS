@@ -213,6 +213,12 @@ simulation_params = {
         'search_resolution': 0.04,       # [m] grid step size for candidate sampling
         'patch_size': 3,                 # number of neighboring heightmap points to sample for gradient estimation
         'gradient_delta': 0.04,          # [m] offset for finite difference gradient estimation = search_resolution
+        
+        # Edge/slope detection threshold
+        # Gradients (dz/dx) below this are considered acceptable slopes for climbing
+        # Above this = dangerous edge/cliff to avoid. Default 0.7 ≈ 35° (tan(35°) ≈ 0.7)
+        'slope_threshold': 0.7,          # [dimensionless] gradient magnitude threshold (dz/dx)
+        
         # Cost function weights (higher = more penalty)
         # Aligned with TAMOLS reference implementation (ianpedroza/tamols-rl)
         'weight_edge_avoidance': 15.0,         # from tamols/costs.py:add_edge_avoidance_cost
