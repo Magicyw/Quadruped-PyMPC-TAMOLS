@@ -795,7 +795,13 @@ class VisualFootholdAdaptation:
             leg_candidate_scores[leg_name] = [c[0] for c in top_candidates]
 
         # Now evaluate combinations for each leg set
-        best_footholds = reference_footholds.copy()
+        # Create a copy of reference_footholds by creating a new LegsAttr with copied arrays
+        best_footholds = LegsAttr(
+            FL=reference_footholds['FL'].copy(),
+            FR=reference_footholds['FR'].copy(),
+            RL=reference_footholds['RL'].copy(),
+            RR=reference_footholds['RR'].copy()
+        )
         base_yaw = base_orientation[2]
 
         for leg_set in leg_sets:
