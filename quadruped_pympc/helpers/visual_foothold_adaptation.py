@@ -536,20 +536,24 @@ class VisualFootholdAdaptation:
 
         # Compute constraint values (same as NMPC create_stability_constraints)
         # For each constraint, negative/zero means satisfied, positive means violated
+        # The margin shrinks the safe region inward
 
         # FL-FR edge: x <= ... or equivalently: x - ... <= 0
         constraint_FL_FR = x - (x_FR - x_FL) * (y - y_FL) / (y_FR - y_FL + eps) - x_FL
-        # Upper bound is 0, so violation is max(constraint_FL_FR + margin, 0)
+        # Upper bound is 0, adding margin shrinks safe region: x - ... <= -margin
+        # So violation is when constraint_FL_FR > -margin, i.e., max(constraint_FL_FR + margin, 0)
         violation_FL_FR = max(constraint_FL_FR + margin, 0.0)
 
         # FR-RR edge: y >= ... or equivalently: ... - y <= 0
         constraint_FR_RR = (y_RR - y_FR) * (x - x_FR) / (x_RR - x_FR + eps) + y_FR - y
-        # Lower bound is 0, so violation is max(constraint_FR_RR + margin, 0)
+        # Lower bound is 0, adding margin shrinks safe region: ... - y <= -margin
+        # So violation is when constraint_FR_RR > -margin, i.e., max(constraint_FR_RR + margin, 0)
         violation_FR_RR = max(constraint_FR_RR + margin, 0.0)
 
         # RR-RL edge: x >= ... or equivalently: ... - x <= 0
         constraint_RR_RL = (x_RL - x_RR) * (y - y_RR) / (y_RL - y_RR + eps) + x_RR - x
-        # Lower bound is 0, so violation is max(constraint_RR_RL + margin, 0)
+        # Lower bound is 0, adding margin shrinks safe region: ... - x <= -margin
+        # So violation is when constraint_RR_RL > -margin, i.e., max(constraint_RR_RL + margin, 0)
         violation_RR_RL = max(constraint_RR_RL + margin, 0.0)
 
         # RL-FL edge: y <= ... or equivalently: y - ... <= 0
