@@ -10,6 +10,49 @@ except ImportError:
 
 
 class VisualFootholdAdaptation:
+    """Visual foothold adaptation for quadruped robots on rough terrain.
+    
+    Supports three adaptation strategies:
+    1. 'height': Simple height adjustment from heightmap
+    2. 'vfa': Visual Foothold Adaptation using convex region analysis
+    3. 'tamols': TAMOLS-inspired terrain-aware foothold selection with stability constraints
+    
+    TAMOLS Strategy with Joint Optimization (NEW):
+    -----------------------------------------------
+    The TAMOLS strategy has been enhanced with joint (multi-leg) foothold selection
+    that considers stability constraints aligned with the NMPC controller.
+    
+    Key improvements:
+    - Instead of optimizing each leg independently, selects footholds jointly for leg groups
+      (e.g., diagonal pairs FL-RR and FR-RL in trot gait)
+    - Evaluates stability constraints using the same inequality structure as
+      Acados_NMPC_Nominal.create_stability_constraints()
+    - Ensures the selected footholds keep the stability point (COM projection or ZMP)
+      inside the support polygon with a configurable safety margin
+    
+    Alignment with NMPC Stability Constraints:
+    ------------------------------------------
+    The joint optimization uses the same mathematical framework as the NMPC controller:
+    1. Transforms foothold positions to horizontal (yaw-rotated) frame: h_R_w @ (foot - base)
+    2. Computes stability proxy point in the same frame (default: COM projection at origin)
+    3. Evaluates 6 inequality constraints defining support polygon edges and diagonals
+    4. Penalizes foothold combinations that violate these constraints
+    
+    This ensures consistency between foothold adaptation and MPC internal constraints,
+    preventing locally optimal but globally unstable foothold selections.
+    
+    Configuration:
+    --------------
+    Set in config.py under simulation_params['tamols_params']:
+    - joint_optimize: Enable joint foothold optimization (default: True)
+    - top_k_per_leg: Number of top candidates per leg for joint evaluation (default: 15)
+    - stability_margin: Safety margin for stability constraints in meters (default: 0.02)
+    - joint_weight_stability: Weight for stability violations in cost (default: 1000.0)
+    
+    See also:
+    - quadruped_pympc.controllers.gradient.nominal.centroidal_nmpc_nominal.Acados_NMPC_Nominal.create_stability_constraints()
+    - docs/TAMOLS_FOOTHOLD_ADAPTATION.md
+    """
     def __init__(self, legs_order, adaptation_strategy='height'):
         self.footholds_adaptation = LegsAttr(
             FL=np.array([0, 0, 0]), FR=np.array([0, 0, 0]), RL=np.array([0, 0, 0]), RR=np.array([0, 0, 0])
@@ -21,7 +64,7 @@ class VisualFootholdAdaptation:
 
         if self.adaptation_strategy == 'vfa':
             self.vfa_evaluators = LegsAttr(FL=None, FR=None, RL=None, RR=None)
-            for leg_id, leg_name in enumerate(legs_order):
+            for _leg_id, leg_name in enumerate(legs_order):
                 self.vfa_evaluators[leg_name] = VFA(leg=leg_name)
 
         # Load TAMOLS parameters if using TAMOLS strategy
@@ -38,7 +81,7 @@ class VisualFootholdAdaptation:
 
     def get_footholds_adapted(self, reference_footholds):
         # If the adaptation is not initialized, return the reference footholds
-        if self.initialized == False:
+        if not self.initialized:
             self.footholds_adaptation = reference_footholds
             return reference_footholds, self.footholds_constraints
         else:
@@ -66,19 +109,19 @@ class VisualFootholdAdaptation:
         base_orientation_rate,
         base_position=None,
     ):
-        for leg_id, leg_name in enumerate(legs_order):
+        for _leg_id, leg_name in enumerate(legs_order):
             if heightmaps[leg_name].data is None:
                 return False
 
         if self.adaptation_strategy == 'height':
-            for leg_id, leg_name in enumerate(legs_order):
+            for _leg_id, leg_name in enumerate(legs_order):
                 height_adjustment = heightmaps[leg_name].get_height(reference_footholds[leg_name])
                 if height_adjustment is not None:
                     reference_footholds[leg_name][2] = height_adjustment
 
         elif self.adaptation_strategy == 'vfa':
             gait_phases = 0.0  # for now
-            for leg_id, leg_name in enumerate(legs_order):
+            for _leg_id, leg_name in enumerate(legs_order):
                 # Transform the heightmap in hip frame
 
                 heightmap = heightmaps[leg_name].data
@@ -122,12 +165,27 @@ class VisualFootholdAdaptation:
         elif self.adaptation_strategy == 'tamols':
             # Store forward velocity for TAMOLS reference tracking
             self.forward_vel = forward_vel
+            
+            # =========================================================================
             # TAMOLS-inspired foothold adaptation strategy
+            # =========================================================================
             # Performs local search around seed footholds using terrain-aware cost metrics
             #
-            # New: Joint foothold selection for stability-aware adaptation
-            # This aligns with NMPC stability constraints (create_stability_constraints)
-            # by selecting footholds jointly for groups of legs (e.g., diagonal pairs in trot)
+            # NEW: Joint foothold selection for stability-aware adaptation
+            # ------------------------------------------------------------
+            # This implementation aligns with NMPC stability constraints defined in
+            # Acados_NMPC_Nominal.create_stability_constraints() by:
+            #
+            # 1. Transforming footholds to the same horizontal (yaw-rotated) frame used by NMPC
+            # 2. Evaluating the same inequality constraints that enforce ZMP/COM inside support polygon
+            # 3. Selecting footholds jointly for leg groups (e.g., diagonal pairs in trot)
+            #    to ensure the resulting support geometry keeps the stability point feasible
+            #
+            # Benefits:
+            # - Prevents locally good but globally poor foothold selections
+            # - Improves balance especially in trot gait (diagonal support)
+            # - Consistent with NMPC's internal stability constraints
+            # =========================================================================
 
             # Try joint optimization if base_position is available
             joint_success = False
@@ -144,7 +202,7 @@ class VisualFootholdAdaptation:
 
             # Fall back to single-leg optimization if joint optimization disabled or failed
             if not joint_success:
-                for leg_id, leg_name in enumerate(legs_order):
+                for _leg_id, leg_name in enumerate(legs_order):
                     seed_foothold = reference_footholds[leg_name].copy()
                     hip_position = hip_positions[leg_name]
                     heightmap = heightmaps[leg_name]
@@ -529,45 +587,46 @@ class VisualFootholdAdaptation:
         x, y = stability_point
 
         # Extract foothold positions
-        x_FL, y_FL = foothold_positions['FL']
-        x_FR, y_FR = foothold_positions['FR']
-        x_RL, y_RL = foothold_positions['RL']
-        x_RR, y_RR = foothold_positions['RR']
+        # Using uppercase leg names to match NMPC convention (see create_stability_constraints)
+        x_FL, y_FL = foothold_positions['FL']  # noqa: N806
+        x_FR, y_FR = foothold_positions['FR']  # noqa: N806
+        x_RL, y_RL = foothold_positions['RL']  # noqa: N806
+        x_RR, y_RR = foothold_positions['RR']  # noqa: N806
 
         # Compute constraint values (same as NMPC create_stability_constraints)
         # For each constraint, negative/zero means satisfied, positive means violated
         # The margin shrinks the safe region inward
 
         # FL-FR edge: x <= ... or equivalently: x - ... <= 0
-        constraint_FL_FR = x - (x_FR - x_FL) * (y - y_FL) / (y_FR - y_FL + eps) - x_FL
+        constraint_FL_FR = x - (x_FR - x_FL) * (y - y_FL) / (y_FR - y_FL + eps) - x_FL  # noqa: N806
         # Upper bound is 0, adding margin shrinks safe region: x - ... <= -margin
         # So violation is when constraint_FL_FR > -margin, i.e., max(constraint_FL_FR + margin, 0)
-        violation_FL_FR = max(constraint_FL_FR + margin, 0.0)
+        violation_FL_FR = max(constraint_FL_FR + margin, 0.0)  # noqa: N806
 
         # FR-RR edge: y >= ... or equivalently: ... - y <= 0
-        constraint_FR_RR = (y_RR - y_FR) * (x - x_FR) / (x_RR - x_FR + eps) + y_FR - y
+        constraint_FR_RR = (y_RR - y_FR) * (x - x_FR) / (x_RR - x_FR + eps) + y_FR - y  # noqa: N806
         # Lower bound is 0, adding margin shrinks safe region: ... - y <= -margin
         # So violation is when constraint_FR_RR > -margin, i.e., max(constraint_FR_RR + margin, 0)
-        violation_FR_RR = max(constraint_FR_RR + margin, 0.0)
+        violation_FR_RR = max(constraint_FR_RR + margin, 0.0)  # noqa: N806
 
         # RR-RL edge: x >= ... or equivalently: ... - x <= 0
-        constraint_RR_RL = (x_RL - x_RR) * (y - y_RR) / (y_RL - y_RR + eps) + x_RR - x
+        constraint_RR_RL = (x_RL - x_RR) * (y - y_RR) / (y_RL - y_RR + eps) + x_RR - x  # noqa: N806
         # Lower bound is 0, adding margin shrinks safe region: ... - x <= -margin
         # So violation is when constraint_RR_RL > -margin, i.e., max(constraint_RR_RL + margin, 0)
-        violation_RR_RL = max(constraint_RR_RL + margin, 0.0)
+        violation_RR_RL = max(constraint_RR_RL + margin, 0.0)  # noqa: N806
 
         # RL-FL edge: y <= ... or equivalently: y - ... <= 0
-        constraint_RL_FL = y - (y_FL - y_RL) * (x - x_RL) / (x_FL - x_RL + eps) - y_RL
+        constraint_RL_FL = y - (y_FL - y_RL) * (x - x_RL) / (x_FL - x_RL + eps) - y_RL  # noqa: N806
         # Upper bound is 0, so violation is max(constraint_RL_FL + margin, 0)
-        violation_RL_FL = max(constraint_RL_FL + margin, 0.0)
+        violation_RL_FL = max(constraint_RL_FL + margin, 0.0)  # noqa: N806
 
         # FL-RR diagonal: y >= ... (for trot/diagonal support)
-        constraint_FL_RR = (y_RR - y_FL) * (x - x_FL) / (x_RR - x_FL + eps) + y_FL - y
-        violation_FL_RR = max(constraint_FL_RR + margin, 0.0)
+        constraint_FL_RR = (y_RR - y_FL) * (x - x_FL) / (x_RR - x_FL + eps) + y_FL - y  # noqa: N806
+        violation_FL_RR = max(constraint_FL_RR + margin, 0.0)  # noqa: N806
 
         # FR-RL diagonal: y >= ... (for trot/diagonal support)
-        constraint_FR_RL = (y_RL - y_FR) * (x - x_FR) / (x_RL - x_FR + eps) + y_FR - y
-        violation_FR_RL = max(constraint_FR_RL + margin, 0.0)
+        constraint_FR_RL = (y_RL - y_FR) * (x - x_FR) / (x_RL - x_FR + eps) + y_FR - y  # noqa: N806
+        violation_FR_RL = max(constraint_FR_RL + margin, 0.0)  # noqa: N806
 
         # Total violation (sum of all constraint violations)
         total_violation = (
@@ -597,7 +656,7 @@ class VisualFootholdAdaptation:
         # Rotation matrix for yaw (same as NMPC)
         cos_yaw = np.cos(base_yaw)
         sin_yaw = np.sin(base_yaw)
-        h_R_w = np.array([[cos_yaw, sin_yaw],
+        h_R_w = np.array([[cos_yaw, sin_yaw],  # noqa: N806
                           [-sin_yaw, cos_yaw]])
 
         horizontal_positions = {}
@@ -888,8 +947,3 @@ class VisualFootholdAdaptation:
             return True
 
         return False
-
-        max_height = base_step_height * max_multiplier
-        adaptive_height = min(adaptive_height, max_height)
-
-        return adaptive_height
