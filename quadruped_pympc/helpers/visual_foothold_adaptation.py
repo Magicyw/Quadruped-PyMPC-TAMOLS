@@ -594,45 +594,55 @@ class VisualFootholdAdaptation:
         x_RR, y_RR = foothold_positions['RR']  # noqa: N806
 
         # Compute constraint values (same as NMPC create_stability_constraints)
-        # For each constraint, negative/zero means satisfied, positive means violated
+        # For each constraint, we match the exact expressions from NMPC
         # The margin shrinks the safe region inward
 
-        # FL-FR edge: x <= ... or equivalently: x - ... <= 0
+        # FL-FR edge: x <= ... 
+        # NMPC: constraint_FL_FR with ub[0] = 0, lb[0] = -ACADOS_INFTY
         constraint_FL_FR = x - (x_FR - x_FL) * (y - y_FL) / (y_FR - y_FL + eps) - x_FL  # noqa: N806
-        # Upper bound is 0, adding margin shrinks safe region: x - ... <= -margin
-        # So violation is when constraint_FL_FR > -margin, i.e., max(constraint_FL_FR + margin, 0)
+        # Constraint should be <= 0. With margin, we want <= -margin, so violation when > -margin
         violation_FL_FR = max(constraint_FL_FR + margin, 0.0)  # noqa: N806
 
-        # FR-RR edge: y >= ... or equivalently: ... - y <= 0
-        constraint_FR_RR = (y_RR - y_FR) * (x - x_FR) / (x_RR - x_FR + eps) + y_FR - y  # noqa: N806
-        # Lower bound is 0, adding margin shrinks safe region: ... - y <= -margin
-        # So violation is when constraint_FR_RR > -margin, i.e., max(constraint_FR_RR + margin, 0)
-        violation_FR_RR = max(constraint_FR_RR + margin, 0.0)  # noqa: N806
+        # FR-RR edge: y >= ...
+        # NMPC: constraint_FR_RR with ub[1] = ACADOS_INFTY, lb[1] = 0
+        constraint_FR_RR = y - (y_RR - y_FR) * (x - x_FR) / (x_RR - x_FR + eps) - y_FR  # noqa: N806
+        # Constraint should be >= 0. With margin, we want >= margin, so violation when < margin
+        violation_FR_RR = max(margin - constraint_FR_RR, 0.0)  # noqa: N806
 
-        # RR-RL edge: x >= ... or equivalently: ... - x <= 0
-        constraint_RR_RL = (x_RL - x_RR) * (y - y_RR) / (y_RL - y_RR + eps) + x_RR - x  # noqa: N806
-        # Lower bound is 0, adding margin shrinks safe region: ... - x <= -margin
-        # So violation is when constraint_RR_RL > -margin, i.e., max(constraint_RR_RL + margin, 0)
-        violation_RR_RL = max(constraint_RR_RL + margin, 0.0)  # noqa: N806
+        # RR-RL edge: x >= ...
+        # NMPC: constraint_RR_RL with ub[2] = ACADOS_INFTY, lb[2] = 0
+        constraint_RR_RL = x - (x_RL - x_RR) * (y - y_RR) / (y_RL - y_RR + eps) - x_RR  # noqa: N806
+        # Constraint should be >= 0. With margin, we want >= margin, so violation when < margin
+        violation_RR_RL = max(margin - constraint_RR_RL, 0.0)  # noqa: N806
 
-        # RL-FL edge: y <= ... or equivalently: y - ... <= 0
+        # RL-FL edge: y <= ...
+        # NMPC: constraint_RL_FL with ub[3] = 0, lb[3] = -ACADOS_INFTY
         constraint_RL_FL = y - (y_FL - y_RL) * (x - x_RL) / (x_FL - x_RL + eps) - y_RL  # noqa: N806
-        # Upper bound is 0, so violation is max(constraint_RL_FL + margin, 0)
+        # Constraint should be <= 0. With margin, we want <= -margin, so violation when > -margin
         violation_RL_FL = max(constraint_RL_FL + margin, 0.0)  # noqa: N806
 
-        # FL-RR diagonal: y >= ... (for trot/diagonal support)
-        constraint_FL_RR = (y_RR - y_FL) * (x - x_FL) / (x_RR - x_FL + eps) + y_FL - y  # noqa: N806
+        # FL-RR diagonal: for trot/diagonal support
+        # NMPC: constraint_FL_RR with ub[4] = 0, lb[4] = -ACADOS_INFTY
+        constraint_FL_RR = y - (y_RR - y_FL) * (x - x_FL) / (x_RR - x_FL + eps) - y_FL  # noqa: N806
+        # Constraint should be <= 0. With margin, we want <= -margin, so violation when > -margin
         violation_FL_RR = max(constraint_FL_RR + margin, 0.0)  # noqa: N806
 
-        # FR-RL diagonal: y >= ... (for trot/diagonal support)
-        constraint_FR_RL = (y_RL - y_FR) * (x - x_FR) / (x_RL - x_FR + eps) + y_FR - y  # noqa: N806
+        # FR-RL diagonal: for trot/diagonal support
+        # NMPC: constraint_FR_RL with ub[5] = 0, lb[5] = -ACADOS_INFTY
+        constraint_FR_RL = y - (y_RL - y_FR) * (x - x_FR) / (x_RL - x_FR + eps) - y_FR  # noqa: N806
+        # Constraint should be <= 0. With margin, we want <= -margin, so violation when > -margin
         violation_FR_RL = max(constraint_FR_RL + margin, 0.0)  # noqa: N806
 
         # Total violation (sum of all constraint violations)
-        total_violation = (
-            violation_FL_FR + violation_FR_RR + violation_RR_RL +
-            violation_RL_FL + violation_FL_RR + violation_FR_RL
-        )
+        violations = [
+            violation_FL_FR,
+            violation_FR_RR,
+            violation_RR_RL,
+            violation_RL_FL,
+            violation_FL_RR,
+            violation_FR_RL
+        ]
+        total_violation = sum(violations)
 
         return total_violation
 
@@ -669,7 +679,7 @@ class VisualFootholdAdaptation:
 
         return horizontal_positions
 
-    def _determine_joint_leg_sets(self, legs_order, gait_type='trot'):
+    def _determine_joint_leg_sets(self, legs_order):
         """Determine which leg sets should be jointly optimized.
 
         For trot: diagonal pairs (FL-RR, FR-RL)
@@ -678,13 +688,11 @@ class VisualFootholdAdaptation:
 
         Args:
             legs_order: list of leg names
-            gait_type: str, gait type (default 'trot')
 
         Returns:
             list of tuples, each tuple contains leg names to jointly optimize
         """
-        # For now, implement trot (diagonal pairs) as the primary use case
-        # Future extension: detect gait from config or parameters
+        # Read gait from config
         gait = cfg.simulation_params.get('gait', 'trot')
 
         if gait in ['trot', 'bound']:
@@ -838,51 +846,51 @@ class VisualFootholdAdaptation:
                 # All four legs: evaluate K^4 combinations (can be expensive, limit K)
                 limited_k = min(5, top_k)  # Limit to avoid combinatorial explosion
                 from itertools import product
-                for cand_combo in product(
-                    leg_candidates['FL'][:limited_k],
-                    leg_candidates['FR'][:limited_k],
-                    leg_candidates['RL'][:limited_k],
-                    leg_candidates['RR'][:limited_k]
-                ):
-                    candidate_footholds = {
-                        'FL': cand_combo[0],
-                        'FR': cand_combo[1],
-                        'RL': cand_combo[2],
-                        'RR': cand_combo[3]
-                    }
+                
+                # Use enumeration to avoid .index() calls
+                for i_fl, cand_fl in enumerate(leg_candidates['FL'][:limited_k]):
+                    for i_fr, cand_fr in enumerate(leg_candidates['FR'][:limited_k]):
+                        for i_rl, cand_rl in enumerate(leg_candidates['RL'][:limited_k]):
+                            for i_rr, cand_rr in enumerate(leg_candidates['RR'][:limited_k]):
+                                candidate_footholds = {
+                                    'FL': cand_fl,
+                                    'FR': cand_fr,
+                                    'RL': cand_rl,
+                                    'RR': cand_rr
+                                }
 
-                    # Transform to horizontal frame
-                    horizontal_positions = self._transform_to_horizontal_frame(
-                        candidate_footholds, base_position, base_yaw
-                    )
+                                # Transform to horizontal frame
+                                horizontal_positions = self._transform_to_horizontal_frame(
+                                    candidate_footholds, base_position, base_yaw
+                                )
 
-                    # Compute stability point proxy
-                    stability_point = self._compute_stability_proxy(
-                        base_position, base_orientation, forward_vel
-                    )
+                                # Compute stability point proxy
+                                stability_point = self._compute_stability_proxy(
+                                    base_position, base_orientation, forward_vel
+                                )
 
-                    # Evaluate stability constraints
-                    stability_violation = self._evaluate_stability_constraints(
-                        horizontal_positions, stability_point, stability_margin
-                    )
+                                # Evaluate stability constraints
+                                stability_violation = self._evaluate_stability_constraints(
+                                    horizontal_positions, stability_point, stability_margin
+                                )
 
-                    # Combined cost
-                    single_leg_cost = sum(
-                        leg_candidate_scores[leg_name][
-                            leg_candidates[leg_name].index(cand_combo[idx])
-                        ]
-                        for idx, leg_name in enumerate(['FL', 'FR', 'RL', 'RR'])
-                    )
-                    total_cost = single_leg_cost + stability_weight * stability_violation
+                                # Combined cost using indices for O(1) lookup
+                                single_leg_cost = (
+                                    leg_candidate_scores['FL'][i_fl] +
+                                    leg_candidate_scores['FR'][i_fr] +
+                                    leg_candidate_scores['RL'][i_rl] +
+                                    leg_candidate_scores['RR'][i_rr]
+                                )
+                                total_cost = single_leg_cost + stability_weight * stability_violation
 
-                    if total_cost < best_combination_cost:
-                        best_combination_cost = total_cost
-                        best_combination = {
-                            'FL': cand_combo[0],
-                            'FR': cand_combo[1],
-                            'RL': cand_combo[2],
-                            'RR': cand_combo[3]
-                        }
+                                if total_cost < best_combination_cost:
+                                    best_combination_cost = total_cost
+                                    best_combination = {
+                                        'FL': cand_fl,
+                                        'FR': cand_fr,
+                                        'RL': cand_rl,
+                                        'RR': cand_rr
+                                    }
 
             # Update best footholds with the selected combination
             if best_combination is not None:

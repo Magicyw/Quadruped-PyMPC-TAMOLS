@@ -94,7 +94,7 @@ try:
     sys.modules['virall'] = virall_module
     sys.modules['virall.vfa'] = virall_vfa
     sys.modules['virall.vfa.vfa'] = virall_vfa_vfa
-except:
+except Exception:
     pass
 
 
@@ -201,8 +201,8 @@ def test_determine_joint_leg_sets():
     
     vfa = VisualFootholdAdaptation(['FL', 'FR', 'RL', 'RR'], adaptation_strategy='tamols')
     
-    # Test trot gait (should give diagonal pairs)
-    leg_sets = vfa._determine_joint_leg_sets(['FL', 'FR', 'RL', 'RR'], gait_type='trot')
+    # Test trot gait (should give diagonal pairs) - gait is read from config
+    leg_sets = vfa._determine_joint_leg_sets(['FL', 'FR', 'RL', 'RR'])
     assert len(leg_sets) == 2, f"Expected 2 leg sets for trot, got {len(leg_sets)}"
     assert ('FL', 'RR') in leg_sets or ('RR', 'FL') in leg_sets, "Expected FL-RR pair"
     assert ('FR', 'RL') in leg_sets or ('RL', 'FR') in leg_sets, "Expected FR-RL pair"
