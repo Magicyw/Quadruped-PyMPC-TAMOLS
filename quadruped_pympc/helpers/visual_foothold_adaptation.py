@@ -424,19 +424,21 @@ class VisualFootholdAdaptation:
     def _compute_roughness_cost(self, candidate, heightmap):
         """Estimate local terrain roughness (height variance).
 
-        Samples multiple nearby points and computes height variance.
+        Samples multiple nearby points and computes detrended height variance
+        to measure irregularity independent of uniform slopes.
 
         Args:
             candidate: np.ndarray [x, y, z] position in world frame
             heightmap: HeightMap object
 
         Returns:
-            float: roughness (variance) cost
+            float: roughness (detrended variance) cost
         """
         delta = self.tamols_params.get('gradient_delta', 0.04) # Sampling spacing (3cm), covering a ~6x6cm patch
 
         # Sample heights in a small 3x3 grid patch centered at candidate
         heights = []
+        positions = []
         for i in range(-1, 2):
             for j in range(-1, 2):
                 query_pos = candidate.copy()
@@ -445,15 +447,35 @@ class VisualFootholdAdaptation:
                 h = heightmap.get_height(query_pos)
                 if h is not None:
                     heights.append(h)
+                    positions.append([i * delta, j * delta])
 
         if len(heights) < 5:
             # Not enough data to compute reliable variance
             return 0.5
 
-        # Compute variance of heights
-        roughness = np.var(heights)
+        heights = np.array(heights)
+        positions = np.array(positions)
 
-        return roughness
+        # Fit a plane to the sampled heights to remove uniform slope effect
+        # Plane equation: z = ax + by + c
+        # Use least squares to find best-fit plane
+        if len(heights) >= 3:
+            # Build design matrix [x, y, 1]
+            design_matrix = np.column_stack([positions[:, 0], positions[:, 1], np.ones(len(heights))])
+            try:
+                # Solve least squares: design_matrix @ [a, b, c]^T = heights
+                plane_params, _, _, _ = np.linalg.lstsq(design_matrix, heights, rcond=None)
+                # Compute predicted heights on the fitted plane
+                predicted_heights = design_matrix @ plane_params
+                # Compute detrended variance (variance from the plane)
+                detrended_variance = np.var(heights - predicted_heights)
+                return detrended_variance
+            except np.linalg.LinAlgError:
+                # If plane fitting fails, fall back to raw variance
+                return np.var(heights)
+        else:
+            # Not enough points for plane fitting, use raw variance
+            return np.var(heights)
 
     def _compute_nominal_kinematic_cost(self, candidate, hip_position):
         """Cost for nominal kinematics - maintains desired hip height.
