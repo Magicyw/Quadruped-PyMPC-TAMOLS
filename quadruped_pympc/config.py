@@ -297,8 +297,10 @@ simulation_params = {
     'high_level_planner': {
         'enabled': False,  # Set to True to use sl1m foothold planner
         'planner_type': 'sl1m',  # Currently only 'sl1m' supported
-        'planning_horizon': 4,  # Number of future steps to plan (Mode A: crawl gait)
+        'planning_horizon': 4,  # Number of future steps to plan
         'use_optimization': True,  # Use sl1m optimization if available, else heuristic fallback
+        'mode_b_enabled': False,  # Mode B: Generate contact schedule (not just footholds)
+        'visualize_footholds': True,  # Visualize planned footholds in MuJoCo
         
         # Plum piles terrain configuration
         # These parameters define the dense cylindrical stepping stone grid

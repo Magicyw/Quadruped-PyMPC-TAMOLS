@@ -121,16 +121,25 @@ class WBInterface:
         # High-level planner initialization (if enabled) ------------------------------------------
         self.hl_planner = None
         self.hl_planner_enabled = cfg.simulation_params.get('high_level_planner', {}).get('enabled', False)
+        self.hl_planner_viz_geoms = {}  # Store visualization geometry IDs
+        self.hl_plan_latest = None  # Store latest plan for visualization
+        self.hl_visualize = cfg.simulation_params.get('high_level_planner', {}).get('visualize_footholds', True)
         
         if self.hl_planner_enabled and HL_PLANNER_AVAILABLE:
             planner_config = cfg.simulation_params['high_level_planner']
             pile_config = planner_config.get('plum_piles', {})
             
             if pile_config.get('enabled', False):
+                # Prepare robot config for planner
+                robot_config = {
+                    'mode_b_enabled': planner_config.get('mode_b_enabled', False),
+                }
+                
                 # Initialize sl1m planner for plum piles
                 self.hl_planner = Sl1mFootholdPlanner(
                     pile_config=pile_config,
                     planning_horizon=planner_config.get('planning_horizon', 4),
+                    robot_config=robot_config,
                     use_sl1m=planner_config.get('use_optimization', True),
                 )
                 
@@ -280,12 +289,28 @@ class WBInterface:
                     reference_velocity=ref_base_lin_vel,
                 )
                 
+                # Store latest plan for visualization
+                self.hl_plan_latest = hl_plan
+                
                 # Override reference footholds with planner output
                 for leg in ['FL', 'FR', 'RL', 'RR']:
                     ref_feet_pos[leg] = hl_plan.footholds[leg].copy()
                 
                 # Store constraint regions for NMPC and heightmap adaptation
                 ref_feet_constraints = hl_plan.foothold_constraints
+                
+                # Mode B: Use contact schedule from planner if available
+                if hl_plan.contact_schedule is not None:
+                    # Override contact sequence from planner (Mode B)
+                    contact_sequence = hl_plan.contact_schedule
+                    # Update current contact from planner's schedule
+                    self.previous_contact = copy.deepcopy(self.current_contact)
+                    self.current_contact = np.array([
+                        contact_sequence[0][0],
+                        contact_sequence[1][0],
+                        contact_sequence[2][0],
+                        contact_sequence[3][0]
+                    ])
                 
                 # Pass constraints to visual foothold adaptation (to clamp adaptations)
                 if cfg.simulation_params['visual_foothold_adaptation'] != 'blind':
@@ -560,3 +585,43 @@ class WBInterface:
             self.vfa.reset()
         self.current_contact = np.array([1, 1, 1, 1])
         return
+    
+    def visualize_planned_footholds(self, mujoco_model, mujoco_data, hl_plan):
+        """Visualize planned footholds from high-level planner.
+        
+        Args:
+            mujoco_model: MuJoCo model
+            mujoco_data: MuJoCo data
+            hl_plan: High-level plan with footholds to visualize
+        """
+        try:
+            from gym_quadruped.utils.mujoco.visual import render_sphere
+            
+            # Colors for each leg
+            leg_colors = {
+                'FL': [1.0, 0.0, 0.0, 0.7],  # Red
+                'FR': [0.0, 1.0, 0.0, 0.7],  # Green
+                'RL': [0.0, 0.0, 1.0, 0.7],  # Blue
+                'RR': [1.0, 1.0, 0.0, 0.7],  # Yellow
+            }
+            
+            # Visualize each planned foothold
+            for leg_name, foothold in hl_plan.footholds.items():
+                # Create unique geom name for this leg's foothold marker
+                geom_name = f"hl_foothold_{leg_name}"
+                
+                # Render sphere at foothold position
+                geom_id = render_sphere(
+                    mujoco_model,
+                    mujoco_data,
+                    foothold,
+                    radius=0.03,  # 3cm sphere
+                    color=leg_colors[leg_name],
+                    name=geom_name
+                )
+                
+                self.hl_planner_viz_geoms[geom_name] = geom_id
+                
+        except (ImportError, Exception):
+            # render_sphere not available or error, skip visualization
+            pass

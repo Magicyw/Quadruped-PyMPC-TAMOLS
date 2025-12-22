@@ -100,6 +100,11 @@ class Sl1mFootholdPlanner:
         self.crawl_sequence = ['FL', 'RR', 'FR', 'RL']
         self.sequence_index = 0
         
+        # Mode B: Enable contact schedule generation
+        self.mode_b_enabled = self.robot_config.get('mode_b_enabled', False)
+        if self.mode_b_enabled:
+            print("sl1m Planner: Mode B enabled - generating contact schedule")
+        
         if not self.use_sl1m:
             warnings.warn(
                 "Sl1mFootholdPlanner initialized in heuristic mode (sl1m not available or disabled).",
@@ -164,15 +169,21 @@ class Sl1mFootholdPlanner:
                 region_type='circle'
             )
         
-        # Mode A: no contact schedule (None means use existing gait generator)
-        # Mode B placeholders
+        # Mode B: Generate contact schedule if enabled
         contact_schedule = None
         phase_schedule = None
+        
+        if self.mode_b_enabled:
+            contact_schedule, phase_schedule = self._generate_contact_schedule(
+                current_contact, base_velocity, reference_velocity
+            )
         
         metadata = {
             'planner_type': 'sl1m' if self.use_sl1m else 'heuristic',
             'planning_horizon': self.planning_horizon,
             'current_swing_leg': self.current_swing_leg,
+            'mode_b_enabled': self.mode_b_enabled,
+        }
         }
         
         return HighLevelPlan(
@@ -354,3 +365,80 @@ class Sl1mFootholdPlanner:
         self.cached_plan = {'FL': [], 'FR': [], 'RL': [], 'RR': []}
         self.current_swing_leg = None
         self.sequence_index = 0
+    
+    def _generate_contact_schedule(
+        self,
+        current_contact: np.ndarray,
+        base_velocity: np.ndarray,
+        reference_velocity: np.ndarray,
+    ) -> Tuple[List[np.ndarray], Dict[str, np.ndarray]]:
+        """Generate contact schedule for Mode B (crawl gait).
+        
+        For crawl gait, generates a sequence where one leg swings at a time
+        following the crawl sequence: FL -> RR -> FR -> RL
+        
+        Args:
+            current_contact: (4,) current contact state [FL, FR, RL, RR]
+            base_velocity: (3,) current base velocity
+            reference_velocity: (3,) desired base velocity
+            
+        Returns:
+            contact_schedule: List of 4 arrays (one per leg), each of shape (horizon,)
+                             with binary values (1=contact, 0=swing)
+            phase_schedule: Dict with phase timing information for each leg
+        """
+        horizon = self.planning_horizon
+        
+        # Initialize contact sequences (all legs in contact initially)
+        contact_fl = np.ones(horizon, dtype=int)
+        contact_fr = np.ones(horizon, dtype=int)
+        contact_rl = np.ones(horizon, dtype=int)
+        contact_rr = np.ones(horizon, dtype=int)
+        
+        # Determine current phase in crawl cycle based on current contact
+        # Crawl sequence: FL -> RR -> FR -> RL
+        current_swing = None
+        for i, leg in enumerate(['FL', 'FR', 'RL', 'RR']):
+            if current_contact[i] == 0:
+                current_swing = leg
+                break
+        
+        # If no leg is swinging, start with FL
+        if current_swing is None:
+            current_swing = 'FL'
+            self.sequence_index = 0
+        else:
+            # Find index in sequence
+            try:
+                self.sequence_index = self.crawl_sequence.index(current_swing)
+            except ValueError:
+                self.sequence_index = 0
+        
+        # Generate contact schedule for horizon steps
+        # Each step represents one swing phase in the crawl cycle
+        for step in range(horizon):
+            # Determine which leg swings at this step
+            swing_leg_name = self.crawl_sequence[(self.sequence_index + step) % 4]
+            
+            # Set that leg to swing (0) at this step
+            if swing_leg_name == 'FL':
+                contact_fl[step] = 0
+            elif swing_leg_name == 'FR':
+                contact_fr[step] = 0
+            elif swing_leg_name == 'RL':
+                contact_rl[step] = 0
+            elif swing_leg_name == 'RR':
+                contact_rr[step] = 0
+        
+        # Pack into list format expected by MPC
+        contact_schedule = [contact_fl, contact_fr, contact_rl, contact_rr]
+        
+        # Phase schedule: timing information for each leg
+        # For crawl gait: duty_factor ~ 0.75-0.8, swing_duration ~ 0.5s
+        phase_schedule = {
+            'duty_factor': np.array([0.8, 0.8, 0.8, 0.8]),
+            'swing_duration': np.array([0.5, 0.5, 0.5, 0.5]),
+            'step_frequency': 0.5,  # Crawl gait is slow
+        }
+        
+        return contact_schedule, phase_schedule
