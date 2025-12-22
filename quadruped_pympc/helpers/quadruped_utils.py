@@ -32,6 +32,7 @@ def plot_swing_mujoco(
     ref_feet_pos: namedtuple,
     early_stance_detector,
     geom_ids: namedtuple = None,
+    hl_plan=None,
 ):
     """Function to plot the desired foot swing trajectory in Mujoco.
 
@@ -44,11 +45,14 @@ def plot_swing_mujoco(
     lift_off_positions (LegsAttr): The lift-off positions for each leg.
     nmpc_footholds (LegsAttr): The footholds for each leg.
     ref_feet_pos (LegsAttr): The reference feet positions for each leg.
+    early_stance_detector: The early stance detector.
     geom_ids (LegsAttr, optional): The geometry ids for each leg. Defaults to None.
+    hl_plan (HighLevelPlan, optional): High-level planner foothold plan. If provided,
+        planned footholds will be visualized with color-coded spheres.
 
     Returns:
     -------
-    LegsAttr: The geometry ids for each leg trajectory
+    tuple: (geom_ids, hl_geom_ids) - The geometry ids for swing trajectory and high-level plan
     """
     from gym_quadruped.utils.mujoco.visual import render_line, render_sphere
     from gym_quadruped.utils.quadruped_utils import LegsAttr
@@ -95,7 +99,42 @@ def plot_swing_mujoco(
             color=np.array([0, 1, 0, 0.5]),
             geom_id=geom_ids[leg_name][-1],
         )
-    return geom_ids
+    
+    # Visualize high-level planner footholds (if available)
+    hl_geom_ids = None
+    if hl_plan is not None:
+        try:
+            # Colors for each leg (from high-level planner visualization)
+            leg_colors = {
+                'FL': np.array([1.0, 0.0, 0.0, 0.7]),  # Red
+                'FR': np.array([0.0, 1.0, 0.0, 0.7]),  # Green
+                'RL': np.array([0.0, 0.0, 1.0, 0.7]),  # Blue
+                'RR': np.array([1.0, 1.0, 0.0, 0.7]),  # Yellow
+            }
+            
+            if hl_geom_ids is None:
+                hl_geom_ids = LegsAttr(FL=-1, FR=-1, RL=-1, RR=-1)
+                # Allocate geometry for high-level planned footholds
+                for leg_name in ["FL", "FR", "RL", "RR"]:
+                    viewer.user_scn.ngeom += 1
+                    hl_geom_ids[leg_name] = viewer.user_scn.ngeom - 1
+            
+            # Render planned footholds
+            for leg_name in ["FL", "FR", "RL", "RR"]:
+                if leg_name in hl_plan.footholds:
+                    foothold = hl_plan.footholds[leg_name]
+                    render_sphere(
+                        viewer=viewer,
+                        position=foothold,
+                        diameter=0.06,  # 6cm diameter (3cm radius)
+                        color=leg_colors[leg_name],
+                        geom_id=hl_geom_ids[leg_name],
+                    )
+        except Exception:
+            # If visualization fails, silently continue
+            pass
+    
+    return geom_ids, hl_geom_ids
 
 
 def check_zmp_constraint_satisfaction(state, contact_status, forces):

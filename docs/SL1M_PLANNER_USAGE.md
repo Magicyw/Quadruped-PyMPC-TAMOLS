@@ -261,15 +261,26 @@ Step 3: [1, 1, 0, 1]  # RL swings
 
 **Now Available!** Planned footholds are visualized as colored spheres in MuJoCo.
 
+**Implementation**:
+- Integrated into `plot_swing_mujoco()` function in `quadruped_utils.py`
+- Automatically visualizes when high-level plan is available
+- Renders colored spheres (6cm diameter) at planned foothold locations
+- Color-coding: FL=Red 🔴, FR=Green 🟢, RL=Blue 🔵, RR=Yellow 🟡
+- Real-time updates every planning cycle
+
 **Features**:
-- Real-time visualization of planned footholds
-- Color-coded by leg:
-  - **FL**: Red 🔴
-  - **FR**: Green 🟢
-  - **RL**: Blue 🔵
-  - **RR**: Yellow 🟡
-- 3cm radius spheres for visibility
-- Updates every planning cycle
+- Automatic when planner enabled (no code changes needed)
+- Clear leg identification with color coding
+- Larger spheres (6cm) than reference footholds (4cm) for distinction
+- Configurable enable/disable via `visualize_footholds: True` (default)
+- Graceful handling if visualization unavailable
+
+**Integration**:
+The visualization is integrated into the existing `plot_swing_mujoco()` function:
+- No separate visualization calls needed
+- Works seamlessly with existing swing trajectory visualization
+- Automatically displays when high-level planner is active
+- Compatible with all rendering code in simulation.py
 
 **Configuration**:
 ```python

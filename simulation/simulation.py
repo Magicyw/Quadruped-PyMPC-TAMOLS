@@ -178,6 +178,8 @@ def run_simulation(
     last_render_time = time.time()
 
     state_obs_history, ctrl_state_history = [], []
+    feet_traj_geom_ids = None
+    hl_foothold_geom_ids = None  # Store high-level planner foothold visualization IDs
     for episode_num in range(N_EPISODES):
         ep_state_history, ep_ctrl_state_history, ep_time = [], [], []
         for _ in tqdm(range(N_STEPS_PER_EPISODE), desc=f"Ep:{episode_num:d}-steps:", total=N_STEPS_PER_EPISODE):
@@ -277,8 +279,13 @@ def run_simulation(
             if render and (time.time() - last_render_time > 1.0 / RENDER_FREQ or env.step_num == 1):
                 _, _, feet_GRF = env.feet_contact_state(ground_reaction_forces=True)
 
-                # Plot the swing trajectory
-                feet_traj_geom_ids = plot_swing_mujoco(
+                # Get high-level planner footholds if available
+                hl_plan = None
+                if hasattr(quadrupedpympc_wrapper.wb_interface, 'hl_plan_latest'):
+                    hl_plan = quadrupedpympc_wrapper.wb_interface.hl_plan_latest
+
+                # Plot the swing trajectory and high-level planned footholds
+                feet_traj_geom_ids, hl_foothold_geom_ids = plot_swing_mujoco(
                     viewer=env.viewer,
                     swing_traj_controller=quadrupedpympc_wrapper.wb_interface.stc,
                     swing_period=quadrupedpympc_wrapper.wb_interface.stc.swing_period,
@@ -293,6 +300,7 @@ def run_simulation(
                     ref_feet_pos=ctrl_state["ref_feet_pos"],
                     early_stance_detector=quadrupedpympc_wrapper.wb_interface.esd,
                     geom_ids=feet_traj_geom_ids,
+                    hl_plan=hl_plan,  # Pass high-level plan for visualization
                 )
 
                 # Update and Plot the heightmap
