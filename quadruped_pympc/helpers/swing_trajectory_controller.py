@@ -221,7 +221,8 @@ if __name__ == "__main__":
     env.reset(random=False)
     env.render()  # Pass in the first render call any mujoco.viewer.KeyCallbackType
 
-    feet_traj_geom_ids, feet_GRF_geom_ids = None, LegsAttr(FL=-1, FR=-1, RL=-1, RR=-1)
+    feet_traj_geom_ids, hl_foothold_geom_ids = None, None
+    feet_GRF_geom_ids = LegsAttr(FL=-1, FR=-1, RL=-1, RR=-1)
     legs_order = ["FL", "FR", "RL", "RR"]
     heightmaps = None
 
@@ -363,8 +364,13 @@ if __name__ == "__main__":
 
         _, _, feet_GRF = env.feet_contact_state(ground_reaction_forces=True)
 
-        # Plot the swing trajectory
-        feet_traj_geom_ids = plot_swing_mujoco(
+        # Get high-level planner footholds if available
+        hl_plan = None
+        if hasattr(wb_interface, 'hl_plan_latest'):
+            hl_plan = wb_interface.hl_plan_latest
+
+        # Plot the swing trajectory and high-level planned footholds
+        feet_traj_geom_ids, hl_foothold_geom_ids = plot_swing_mujoco(
             viewer=env.viewer,
             swing_traj_controller=wb_interface.stc,
             swing_period=wb_interface.stc.swing_period,
@@ -378,6 +384,7 @@ if __name__ == "__main__":
             nmpc_footholds=nmpc_footholds,
             ref_feet_pos=ref_feet_pos,
             geom_ids=feet_traj_geom_ids,
+            hl_plan=hl_plan,
         )
 
         # Update and Plot the heightmap
