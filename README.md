@@ -33,6 +33,14 @@ Features terrain-aware foothold adaptation:
 - easy integration: just set `scene: 'stepping_stones_medium'` in config.py
 - see [TAMOLS documentation](docs/TAMOLS_FOOTHOLD_ADAPTATION.md), [stepping stones terrain](docs/STEPPING_STONES_TERRAIN.md), and [usage guide](docs/USING_STEPPING_STONES.md) for details
 
+Features high-level foothold planning with sl1m:
+- **NEW**: sl1m integration for plum piles (dense stepping stones) terrain
+- Plans 4-step rolling horizon for crawl gait on challenging cylindrical obstacles
+- Mode A: Foothold-only planning with reserved interfaces for Mode B (contact schedule)
+- Automatic constraint enforcement to keep footholds within safe pile tops
+- Graceful fallback to heuristic if sl1m not installed
+- See [sl1m planner usage guide](docs/SL1M_PLANNER_USAGE.md) for details
+
 ## Installation and Run
 
 See [here](https://github.com/iit-DLSLab/Quadruped-PyMPC/blob/main/README_install.md).
@@ -55,6 +63,24 @@ python simulation.py
 **Important**: The installer copies terrain files to gym_quadruped's scene directory. This only needs to be done once.
 
 See [usage guide](docs/USING_STEPPING_STONES.md) for detailed configuration and troubleshooting.
+
+### Quick Start with sl1m Planner on Plum Piles
+
+```bash
+# 1. Generate plum piles terrain
+cd simulation
+python3 plum_piles_scene.py
+
+# 2. Edit config.py to enable sl1m planner
+# Set: simulation_params['high_level_planner']['enabled'] = True
+# Set: simulation_params['high_level_planner']['plum_piles']['enabled'] = True
+# Set: simulation_params['gait'] = 'crawl'
+
+# 3. Run simulation
+python simulation.py
+```
+
+See [sl1m planner guide](docs/SL1M_PLANNER_USAGE.md) for complete documentation.
 
 ## Citing this work
 
