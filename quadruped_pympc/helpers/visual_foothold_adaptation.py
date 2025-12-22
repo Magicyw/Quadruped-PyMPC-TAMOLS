@@ -219,7 +219,7 @@ class VisualFootholdAdaptation:
         Combines multiple cost terms inspired by TAMOLS reference (ianpedroza/tamols-rl):
         - Support feasibility: hard constraint for stepping stones (rejects edge/void footholds)
         - Edge avoidance: penalizes high terrain gradients (from tamols/costs.py:add_edge_avoidance_cost)
-        - Roughness: penalizes irregular terrain  
+        - Roughness: penalizes irregular terrain
         - Support quality: soft cost for support region quality
         - Previous solution tracking: penalizes deviation from seed (from tamols/costs.py:add_previous_solution_cost)
         - Kinematic reachability: enforces distance bounds (from tamols/constraints.py:add_kinematic_constraints)
@@ -571,9 +571,9 @@ class VisualFootholdAdaptation:
                 h = heightmap.get_height(query_pos)
                 if h is not None:
                     heights.append(h)
-                    # Calculate height drop (positive if h is below center)
+                    # Calculate height drop (positive value when h is below center)
                     drop = center_height - h
-                    if drop > 0:  # Only consider negative drops (terrain below candidate)
+                    if drop > 0:  # Collect drops where terrain is below candidate
                         drops.append(drop)
 
         # Require a reasonable amount of data for reliable cost computation
@@ -583,7 +583,7 @@ class VisualFootholdAdaptation:
             # Not enough data, return moderate penalty
             return 0.5
 
-        # Cost component 1: Penalize negative drops (terrain below candidate)
+        # Cost component 1: Penalize drops where terrain is below candidate
         # This penalizes footholds near edges where terrain drops away
         drop_cost = 0.0
         if len(drops) > 0:
