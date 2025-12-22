@@ -499,15 +499,17 @@ class VisualFootholdAdaptation:
         center_height = candidate[2]
         half_patch = patch_size // 2  # For 5x5, this is 2
 
+        # Create a reusable query position array to avoid repeated copies
+        query_pos = candidate.copy()
+
         # Sample heights in a patch around the candidate
         for i in range(-half_patch, half_patch + 1):
             for j in range(-half_patch, half_patch + 1):
                 # Calculate offset position
                 offset_x = i * delta
                 offset_y = j * delta
-                query_pos = candidate.copy()
-                query_pos[0] += offset_x
-                query_pos[1] += offset_y
+                query_pos[0] = candidate[0] + offset_x
+                query_pos[1] = candidate[1] + offset_y
 
                 # Query height at this position
                 h = heightmap.get_height(query_pos)
@@ -558,11 +560,13 @@ class VisualFootholdAdaptation:
         heights = []
         drops = []  # Track negative height drops
 
+        # Create a reusable query position array to avoid repeated copies
+        query_pos = candidate.copy()
+
         for i in range(-half_patch, half_patch + 1):
             for j in range(-half_patch, half_patch + 1):
-                query_pos = candidate.copy()
-                query_pos[0] += i * delta
-                query_pos[1] += j * delta
+                query_pos[0] = candidate[0] + i * delta
+                query_pos[1] = candidate[1] + j * delta
 
                 h = heightmap.get_height(query_pos)
                 if h is not None:
