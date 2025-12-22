@@ -221,6 +221,12 @@ simulation_params = {
         'weight_kinematic': 10.0,             # from tamols/constraints.py:add_kinematic_constraints
         'weight_nominal_kinematic': 1.0,     # from tamols/costs.py:add_nominal_kinematic_cost (GIA: maintains hip height)
         'weight_reference_tracking': 5.0,     # from tamols/costs.py:add_tracking_cost (GIA: tracks velocity, prevents standing still)
+        'weight_support': 50.0,               # support-region feasibility cost weight
+
+        # Support-region feasibility parameters (for stepping stones terrain)
+        'support_patch_size': 5,              # size of patch for support checking (5x5 grid)
+        'support_edge_margin': 0.04,          # [m] edge margin for drop detection
+        'support_drop_threshold': 0.05,       # [m] max allowed height drop within edge margin
 
         # Nominal kinematic parameters
         'h_des': hip_height,                        # [m] desired hip height for nominal kinematics (go1/go2: 0.25, aliengo: 0.30)
