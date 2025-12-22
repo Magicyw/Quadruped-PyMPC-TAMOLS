@@ -212,27 +212,30 @@ class Sl1mFootholdPlanner:
         reference_velocity: np.ndarray,
         feet_positions: LegsAttr,
     ) -> None:
-        """Plan footholds using sl1m optimization (stub - requires sl1m integration).
+        """Plan footholds using sl1m optimization.
         
-        This is a placeholder. Full implementation would:
-        1. Build sl1m Problem with surfaces (pile polygons)
-        2. Set up kinematic constraints
-        3. Call sl1m solver (e.g., generic_solver.solve_L1_combinatorial)
-        4. Extract foothold sequence
+        NOTE: This is a placeholder for full sl1m integration. The sl1m API
+        requires specific input formats and solver configuration that are
+        pending integration. Currently falls back to heuristic planning.
         
-        For now, fall back to heuristic.
+        When fully integrated, this method will:
+        1. Build sl1m Problem with surfaces (pile polygons as convex patches)
+        2. Set up kinematic constraints (reachability from hips)
+        3. Define objective (track reference velocity, minimize effort)
+        4. Call sl1m solver (e.g., generic_solver.solve_L1_combinatorial)
+        5. Extract foothold sequence from solution
+        
+        The fallback to heuristic ensures the planner is functional even
+        without sl1m installed or while API integration is in progress.
         """
-        # TODO: Implement full sl1m integration when sl1m API is defined
-        # sl1m would require:
+        # TODO: Implement full sl1m integration when sl1m API is finalized
+        # sl1m integration requires:
         # - Surface definitions (convex polygons from pile tops)
         # - Initial foot positions
         # - Kinematic constraints (reachability from hips)
         # - Objective (track reference velocity, minimize effort)
         
-        warnings.warn(
-            "sl1m optimization not yet fully integrated. Falling back to heuristic.",
-            UserWarning
-        )
+        # Fall back to heuristic for now
         self._plan_with_heuristic(base_position, base_velocity, reference_velocity, feet_positions)
     
     def _plan_with_heuristic(

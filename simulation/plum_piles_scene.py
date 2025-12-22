@@ -121,10 +121,17 @@ def create_plum_piles_scene(
             # Place cylinder with its top at pile_height
             # MuJoCo cylinder size is (radius, half-height)
             pile_z_center = pile_height / 2
+            # Round coordinates to avoid floating point precision artifacts
+            x_rounded = round(x_pos, 2)
+            y_rounded = round(y_pos, 2)
+            z_rounded = round(pile_z_center, 4)
+            r_rounded = round(pile_radius, 4)
+            h_rounded = round(pile_height / 2, 4)
+            
             xml_parts.append(
                 f'    <geom name="pile_{pile_count}" type="cylinder" '
-                f'pos="{x_pos} {y_pos} {pile_z_center}" '
-                f'size="{pile_radius} {pile_height/2}" '
+                f'pos="{x_rounded} {y_rounded} {z_rounded}" '
+                f'size="{r_rounded} {h_rounded}" '
                 f'material="pile" friction="{ground_friction} 0.005 0.0001"/>'
             )
             pile_count += 1

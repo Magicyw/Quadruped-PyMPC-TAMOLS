@@ -291,7 +291,12 @@ class WBInterface:
                 if cfg.simulation_params['visual_foothold_adaptation'] != 'blind':
                     self.vfa.set_hl_planner_constraints(ref_feet_constraints)
                     
-            except Exception as e:
+            except (ImportError, AttributeError, ValueError, KeyError) as e:
+                # Catch specific exceptions:
+                # - ImportError: Module/function not available
+                # - AttributeError: Missing method/attribute
+                # - ValueError: Invalid input data
+                # - KeyError: Missing config key
                 import warnings
                 warnings.warn(f"High-level planner failed: {e}. Using default foothold reference.", UserWarning)
 
