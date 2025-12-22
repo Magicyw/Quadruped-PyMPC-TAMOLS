@@ -298,7 +298,7 @@ simulation_params = {
         'enabled': False,  # Set to True to use sl1m foothold planner
         'planner_type': 'sl1m',  # Currently only 'sl1m' supported
         'planning_horizon': 4,  # Number of future steps to plan
-        'use_optimization': True,  # Use sl1m optimization if available, else heuristic fallback
+        'use_optimization': False,  # Use heuristic (sl1m package not installable currently)
         'mode_b_enabled': False,  # Mode B: Generate contact schedule (not just footholds)
         'visualize_footholds': True,  # Visualize planned footholds in MuJoCo
         

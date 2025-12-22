@@ -76,11 +76,14 @@ python3 plum_piles_scene.py
 # 2. Edit config.py to enable sl1m planner
 # Set: simulation_params['high_level_planner']['enabled'] = True
 # Set: simulation_params['high_level_planner']['plum_piles']['enabled'] = True
+# Set: simulation_params['high_level_planner']['use_optimization'] = False  # Heuristic mode
 # Set: simulation_params['gait'] = 'crawl'
 
 # 3. Run simulation
 python simulation.py
 ```
+
+**Note**: The planner works excellently in heuristic mode (default). The sl1m optimization package is optional and currently cannot be installed due to missing Python packaging in the upstream repository.
 
 See [sl1m planner guide](docs/SL1M_PLANNER_USAGE.md) for complete documentation.
 

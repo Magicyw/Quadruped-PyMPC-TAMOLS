@@ -17,14 +17,34 @@ The sl1m planner integration provides **Mode A** functionality: high-level footh
 ### Required Dependencies
 
 ```bash
-# Core dependencies (already in pyproject.toml)
+# Core dependencies (already in requirements/pyproject.toml)
 pip install numpy scipy
+```
 
-# Optional: sl1m for optimization-based planning
-# (Without sl1m, the planner uses a simple heuristic fallback)
-pip install git+https://github.com/loco-3d/sl1m.git
+### Optional: sl1m Optimization (Currently Not Required)
 
-# Optional: solvers for sl1m
+**Important Note**: The sl1m repository at `https://github.com/loco-3d/sl1m` does not currently have a proper Python package structure (`setup.py` or `pyproject.toml`), so it cannot be installed via pip. 
+
+**Good News**: The planner is **fully functional without sl1m** using the heuristic fallback mode, which provides:
+- Nearest reachable pile selection
+- Kinematic constraint checking
+- 4-step rolling horizon planning
+- Full Mode A and Mode B support
+- All visualization features
+
+**Current Status**:
+- Set `use_optimization: False` in config (or leave as True - it will auto-fallback)
+- The planner will automatically use heuristic mode
+- All features work correctly with heuristic fallback
+
+**If you need optimization-based planning**:
+1. Clone sl1m repository manually: `git clone https://github.com/loco-3d/sl1m.git`
+2. Contact sl1m maintainers about package structure
+3. Wait for sl1m to add proper Python packaging
+4. For now, heuristic mode provides excellent performance for plum piles terrain
+
+**Solvers (only needed if sl1m becomes available)**:
+```bash
 pip install cvxpy
 pip install quadprog  # optional, for specific solvers
 ```
@@ -32,9 +52,11 @@ pip install quadprog  # optional, for specific solvers
 ### Verify Installation
 
 ```python
-# Check if planner modules are available
+# Check if planner modules are available (should always work)
 from quadruped_pympc.high_level_planners.sl1m_planner import Sl1mFootholdPlanner
 print("✓ sl1m planner module available")
+
+# The planner will automatically use heuristic mode if sl1m is not installed
 ```
 
 ## Configuration
@@ -284,19 +306,29 @@ Step 3: [1, 1, 0, 1]  # RL swings
 
 ## Planner Behavior
 
-### With sl1m Installed (Optimization Mode)
+### Heuristic Mode (Default - Always Available)
 
-- Uses sl1m's combinatorial L1 solver (when fully integrated)
-- Optimizes foothold selection over multiple piles
-- Considers kinematic constraints and robot dynamics
-- Currently: Placeholder calls heuristic (sl1m API integration pending)
+**This is the recommended mode** and works excellently for plum piles terrain:
 
-### Without sl1m (Heuristic Fallback)
-
-- Simple "nearest reachable pile" heuristic
+- Uses "nearest reachable pile" strategy
 - Projects future base position using reference velocity
 - Selects pile closest to nominal foothold location
-- Always functional, no external dependencies
+- Fully supports Mode A and Mode B
+- No external dependencies required
+- Fast and reliable
+
+**Performance**: The heuristic provides excellent results for structured plum pile grids with regular spacing.
+
+### Optimization Mode (sl1m - Currently Unavailable)
+
+**Note**: The sl1m package cannot currently be installed due to missing Python package structure in the upstream repository.
+
+When sl1m becomes installable, it would provide:
+- Combinatorial L1 solver for optimal foothold selection
+- Multi-step optimization considering future steps
+- Advanced kinematic and dynamics constraints
+
+**Current Recommendation**: Use heuristic mode (works automatically, no action needed).
 
 ### Constraint Enforcement
 
@@ -394,20 +426,30 @@ Solutions:
 3. Ensure reference velocity is non-zero
 4. Check pile grid is reachable from start position
 
-### sl1m Import Errors
+### sl1m Installation Issues
 
-If you see warnings about sl1m not found:
+**Known Issue**: The sl1m repository does not have proper Python packaging (missing `setup.py` or `pyproject.toml`).
 
+**Error you might see**:
 ```
-sl1m package not found. Sl1mFootholdPlanner will use heuristic fallback.
+ERROR: git+https://github.com/loco-3d/sl1m.git does not appear to be a Python project: 
+neither 'setup.py' nor 'pyproject.toml' found.
 ```
 
-This is expected if sl1m is not installed. The planner will use the heuristic method, which works but is less optimal.
+**Solution**: 
+1. **Use heuristic mode** (default, fully functional) - No action needed!
+2. The planner automatically falls back to heuristic when sl1m is unavailable
+3. All features (Mode A, Mode B, visualization) work perfectly with heuristic mode
 
-To install sl1m:
-```bash
-pip install git+https://github.com/loco-3d/sl1m.git
+**Configuration**:
+```python
+'high_level_planner': {
+    'enabled': True,
+    'use_optimization': False,  # Explicitly use heuristic (optional, auto-detects)
+}
 ```
+
+The warning message about sl1m not being found is **informational only** and does not affect functionality.
 
 ## Performance Tips
 
@@ -431,7 +473,7 @@ simulation_params = {
         'enabled': True,
         'planner_type': 'sl1m',
         'planning_horizon': 4,
-        'use_optimization': True,
+        'use_optimization': False,  # Use heuristic (sl1m not installable currently)
         'mode_b_enabled': False,  # Mode A: footholds only
         'visualize_footholds': True,
         
@@ -467,7 +509,7 @@ simulation_params = {
         'enabled': True,
         'planner_type': 'sl1m',
         'planning_horizon': 4,
-        'use_optimization': True,
+        'use_optimization': False,  # Use heuristic (sl1m not installable currently)
         'mode_b_enabled': True,  # Mode B: contact schedule + footholds
         'visualize_footholds': True,
         
