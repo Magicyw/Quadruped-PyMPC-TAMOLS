@@ -517,8 +517,9 @@ class VisualFootholdAdaptation:
                     return False
 
                 # Check if this sample is within the edge margin
-                sample_distance = np.sqrt(offset_x**2 + offset_y**2)
-                if sample_distance <= edge_margin:
+                # Use squared distance to avoid sqrt computation
+                sample_distance_squared = offset_x**2 + offset_y**2
+                if sample_distance_squared <= edge_margin**2:
                     # Within edge margin: check for significant drops
                     height_drop = center_height - h
                     if height_drop > drop_threshold:
@@ -571,7 +572,10 @@ class VisualFootholdAdaptation:
                     if drop > 0:  # Only consider negative drops (terrain below candidate)
                         drops.append(drop)
 
-        if len(heights) < 5:
+        # Require a reasonable amount of data for reliable cost computation
+        # Use 20% of expected patch samples as minimum threshold
+        min_samples = max(5, int(patch_size * patch_size * 0.2))
+        if len(heights) < min_samples:
             # Not enough data, return moderate penalty
             return 0.5
 
