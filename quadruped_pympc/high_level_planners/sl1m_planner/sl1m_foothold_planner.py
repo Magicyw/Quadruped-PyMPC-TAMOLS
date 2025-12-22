@@ -269,15 +269,20 @@ class Sl1mFootholdPlanner:
                 best_pile = self._find_nearest_reachable_pile(nominal_foothold)
                 
                 if best_pile is not None:
-                    # Use pile center at pile height
+                    # Use pile center XY at pile height
+                    # NOTE: Set Z to 0 (ground level) initially. The heightmap adaptation
+                    # or terrain estimator will adjust Z to the actual pile height.
+                    # This prevents the swing generator from lifting the leg too high,
+                    # as it adds step_height on top of max(lift_off_z, touch_down_z).
                     foothold = np.array([
                         best_pile['center'][0],
                         best_pile['center'][1],
-                        best_pile['height']
+                        0.0  # Ground level - let heightmap set actual height
                     ])
                 else:
                     # No pile found, use nominal (may not be safe)
                     foothold = nominal_foothold.copy()
+                    foothold[2] = 0.0  # Also set to ground level
                 
                 # Add to cache
                 if len(self.cached_plan[leg]) <= step:

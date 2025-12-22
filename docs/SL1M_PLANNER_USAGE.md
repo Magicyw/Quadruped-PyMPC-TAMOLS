@@ -165,16 +165,24 @@ High-level planner enabled: sl1m foothold planner for plum piles terrain
 │    └─> Nominal footholds (geometric heuristic)          │
 │                                                          │
 │ 3. *** High-Level Planner (sl1m) ***                    │
-│    └─> Override footholds with planned pile positions   │
+│    └─> Override XY with planned pile positions          │
+│    └─> Set Z=0 (heightmap will set actual pile height)  │
 │    └─> Generate constraint regions (pile top circles)   │
 │                                                          │
 │ 4. Visual Foothold Adaptation (VFA)                     │
-│    └─> Adapt footholds using heightmap                  │
-│    └─> Clamp adaptations to constraint regions          │
+│    └─> Update Z coordinate from heightmap               │
+│    └─> Adapt footholds if needed                        │
+│    └─> Clamp XY adaptations to constraint regions       │
 │                                                          │
-│ 5. Pass to NMPC with foothold constraints               │
+│ 5. Swing Trajectory Generator                           │
+│    └─> Generate swing trajectory with step_height       │
+│    └─> Apex = max(lift_off.z, touch_down.z) + step_height │
+│                                                          │
+│ 6. Pass to NMPC with foothold constraints               │
 └─────────────────────────────────────────────────────────┘
 ```
+
+**Important Note**: The planner sets foothold XY coordinates only. The Z coordinate is initialized to ground level (0.0) and later adjusted by the heightmap/terrain adaptation. This prevents the swing generator from lifting the leg too high, as it adds `step_height` on top of the maximum Z between lift-off and touch-down positions.
 
 ### Mode A: Foothold Planning Only
 
@@ -270,6 +278,23 @@ Solution: Verify `high_level_planners` package is importable:
 ```python
 from quadruped_pympc.high_level_planners.sl1m_planner import Sl1mFootholdPlanner
 ```
+
+### Legs Lifting Too High
+
+**Symptoms**: Robot legs lift extremely high during swing phase (much higher than step_height)
+
+**Root Cause**: This was an issue in earlier versions where the planner set the foothold Z coordinate to the absolute pile height (0.268m). The swing trajectory generator then added step_height on top of this, causing apex heights of 0.268 + step_height ≈ 0.33m.
+
+**Solution** (Fixed in current version):
+- The planner now sets foothold Z to ground level (0.0)
+- Heightmap adaptation updates Z to actual pile height during planning
+- Swing apex is correctly calculated as max(lift_off.z, touch_down.z) + step_height
+
+**If you still experience this**:
+1. Verify you're using the latest version of the planner
+2. Check `step_height` in config.py: should be `0.2 * hip_height` (about 0.06m for Aliengo)
+3. Ensure heightmap adaptation is enabled: `visual_foothold_adaptation` should not be 'blind'
+4. Check console output for any warnings about planner failures
 
 ### Footholds Off Pile Tops
 
