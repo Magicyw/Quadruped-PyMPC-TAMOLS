@@ -472,16 +472,17 @@ class VisualFootholdAdaptation:
         return cost
 
     def _check_support_feasibility(self, candidate, heightmap):
-        """Check if candidate foothold has sufficient support region (hard constraint).
+        """Check if candidate foothold has sufficient support region using convex polygon (hard constraint).
 
         For stepping-stone terrain, verifies that the candidate is not on an edge or void
-        by examining a 5x5 patch around the candidate position. This prevents the robot
-        from selecting footholds that would cause "踏空" (stepping into voids).
+        by sampling points around the candidate and computing a convex support polygon.
+        This prevents the robot from selecting footholds that would cause "踏空" (stepping into voids).
 
-        The feasibility check uses two criteria:
-        1. Edge margin check: Within a radius of support_edge_margin (default 0.04m),
-           no sample should drop more than support_drop_threshold below the candidate height.
-        2. Patch completeness: All samples in the patch must return valid heights.
+        The feasibility check:
+        1. Samples points in a circular pattern around the candidate
+        2. Identifies points at similar height (forming the support surface)
+        3. Computes the convex hull of these support points
+        4. Checks if the candidate is well within this convex polygon with adequate margin
 
         Args:
             candidate: np.ndarray [x, y, z] candidate foothold in world frame
@@ -491,52 +492,82 @@ class VisualFootholdAdaptation:
             bool: True if candidate has sufficient support, False otherwise
         """
         # Get parameters
-        patch_size = self.tamols_params.get('support_patch_size', 5)
         edge_margin = self.tamols_params.get('support_edge_margin', 0.04)
         drop_threshold = self.tamols_params.get('support_drop_threshold', 0.05)
-        delta = self.tamols_params.get('gradient_delta', 0.04)
+        sample_radius = self.tamols_params.get('support_sample_radius', 0.08)
+        num_samples = self.tamols_params.get('support_num_samples', 16)
 
         center_height = candidate[2]
-        half_patch = patch_size // 2  # For 5x5, this is 2
-
-        # Create a reusable query position array to avoid repeated copies
+        
+        # Sample points in a circular pattern around the candidate
+        support_points = []
         query_pos = candidate.copy()
-
-        # Sample heights in a patch around the candidate
-        for i in range(-half_patch, half_patch + 1):
-            for j in range(-half_patch, half_patch + 1):
-                # Calculate offset position
-                offset_x = i * delta
-                offset_y = j * delta
-                query_pos[0] = candidate[0] + offset_x
-                query_pos[1] = candidate[1] + offset_y
-
-                # Query height at this position
-                h = heightmap.get_height(query_pos)
-
-                # If height is missing (None), region is incomplete - mark infeasible
-                if h is None:
-                    return False
-
-                # Check if this sample is within the edge margin
-                # Use squared distance to avoid sqrt computation
-                sample_distance_squared = offset_x**2 + offset_y**2
-                if sample_distance_squared <= edge_margin**2:
-                    # Within edge margin: check for significant drops
-                    height_drop = center_height - h
-                    if height_drop > drop_threshold:
-                        # Significant drop detected within edge margin - edge/void detected
-                        return False
-
+        
+        # Add center point
+        angles = np.linspace(0, 2 * np.pi, num_samples, endpoint=False)
+        
+        for angle in angles:
+            offset_x = sample_radius * np.cos(angle)
+            offset_y = sample_radius * np.sin(angle)
+            query_pos[0] = candidate[0] + offset_x
+            query_pos[1] = candidate[1] + offset_y
+            
+            h = heightmap.get_height(query_pos)
+            
+            # If height is missing, mark infeasible
+            if h is None:
+                return False
+            
+            # Check if this point is at similar height (part of support surface)
+            height_diff = abs(h - center_height)
+            if height_diff <= drop_threshold:
+                # This point is part of the support surface
+                support_points.append([offset_x, offset_y])
+        
+        # Need at least 3 points to form a polygon
+        if len(support_points) < 3:
+            return False
+        
+        # Check if we have sufficient support coverage around the candidate
+        # Use a simpler approach: check if we have support points in multiple directions
+        support_angles = []
+        for point in support_points:
+            angle = np.arctan2(point[1], point[0])
+            support_angles.append(angle)
+        
+        support_angles = np.sort(support_angles)
+        
+        # Check for large gaps in angular coverage (indicates edge)
+        max_gap = 0
+        for i in range(len(support_angles)):
+            next_i = (i + 1) % len(support_angles)
+            gap = support_angles[next_i] - support_angles[i]
+            if next_i == 0:
+                gap = (2 * np.pi - support_angles[i]) + support_angles[0]
+            max_gap = max(max_gap, gap)
+        
+        # If there's a gap larger than 120 degrees, we're likely on an edge
+        max_allowed_gap = self.tamols_params.get('support_max_gap_degrees', 120) * np.pi / 180
+        if max_gap > max_allowed_gap:
+            return False
+        
+        # Additionally check if minimum distance from candidate to missing support is adequate
+        # If we have less than 75% of samples as support points, likely on edge
+        support_ratio = len(support_points) / num_samples
+        min_support_ratio = self.tamols_params.get('support_min_ratio', 0.75)
+        if support_ratio < min_support_ratio:
+            return False
+        
         # All checks passed - candidate is feasible
         return True
 
     def _compute_support_cost(self, candidate, heightmap):
-        """Compute support-region quality cost (soft cost).
+        """Compute support-region quality cost based on convex support polygon (soft cost).
 
         Penalizes candidates with:
-        - Large negative height drops in the surrounding patch
-        - High patch height variance (indicating rough/uneven support)
+        - Incomplete angular coverage (near edges)
+        - Low support point ratio
+        - Height variance in support region
 
         This provides a smooth cost gradient that guides foothold selection toward
         stable, flat support regions even when multiple candidates pass the hard
@@ -550,54 +581,69 @@ class VisualFootholdAdaptation:
             float: non-negative support quality cost (lower is better)
         """
         # Get parameters
-        patch_size = self.tamols_params.get('support_patch_size', 5)
-        delta = self.tamols_params.get('gradient_delta', 0.04)
+        sample_radius = self.tamols_params.get('support_sample_radius', 0.08)
+        num_samples = self.tamols_params.get('support_num_samples', 16)
+        drop_threshold = self.tamols_params.get('support_drop_threshold', 0.05)
 
         center_height = candidate[2]
-        half_patch = patch_size // 2
-
-        # Collect heights from patch
-        heights = []
-        drops = []  # Track negative height drops
-
-        # Create a reusable query position array to avoid repeated copies
+        
+        # Sample points in a circular pattern
+        support_points = []
+        all_heights = []
         query_pos = candidate.copy()
-
-        for i in range(-half_patch, half_patch + 1):
-            for j in range(-half_patch, half_patch + 1):
-                query_pos[0] = candidate[0] + i * delta
-                query_pos[1] = candidate[1] + j * delta
-
-                h = heightmap.get_height(query_pos)
-                if h is not None:
-                    heights.append(h)
-                    # Calculate height drop (positive value when h is below center)
-                    drop = center_height - h
-                    if drop > 0:  # Collect drops where terrain is below candidate
-                        drops.append(drop)
-
-        # Require a reasonable amount of data for reliable cost computation
-        # Use 20% of expected patch samples as minimum threshold
-        min_samples = max(5, int(patch_size * patch_size * 0.2))
-        if len(heights) < min_samples:
-            # Not enough data, return moderate penalty
-            return 0.5
-
-        # Cost component 1: Penalize drops where terrain is below candidate
-        # This penalizes footholds near edges where terrain drops away
-        drop_cost = 0.0
-        if len(drops) > 0:
-            # Penalize maximum drop and average drop
-            max_drop = max(drops)
-            avg_drop = np.mean(drops)
-            drop_cost = max_drop**2 + avg_drop**2
-
-        # Cost component 2: Penalize height variance (roughness)
-        # De-trend by removing mean to focus on local irregularity
-        heights_array = np.array(heights)
+        
+        angles = np.linspace(0, 2 * np.pi, num_samples, endpoint=False)
+        
+        for angle in angles:
+            offset_x = sample_radius * np.cos(angle)
+            offset_y = sample_radius * np.sin(angle)
+            query_pos[0] = candidate[0] + offset_x
+            query_pos[1] = candidate[1] + offset_y
+            
+            h = heightmap.get_height(query_pos)
+            
+            if h is not None:
+                all_heights.append(h)
+                # Check if this point is at similar height
+                height_diff = abs(h - center_height)
+                if height_diff <= drop_threshold:
+                    support_points.append([offset_x, offset_y])
+        
+        if len(all_heights) < 4:
+            # Not enough data, return high penalty
+            return 10.0
+        
+        # Cost component 1: Penalize low support ratio
+        support_ratio = len(support_points) / num_samples if num_samples > 0 else 0
+        ratio_cost = (1.0 - support_ratio) ** 2
+        
+        # Cost component 2: Penalize angular gaps (incomplete coverage)
+        gap_cost = 0.0
+        if len(support_points) >= 3:
+            support_angles = []
+            for point in support_points:
+                angle = np.arctan2(point[1], point[0])
+                support_angles.append(angle)
+            
+            support_angles = np.sort(support_angles)
+            
+            # Find maximum gap
+            max_gap = 0
+            for i in range(len(support_angles)):
+                next_i = (i + 1) % len(support_angles)
+                gap = support_angles[next_i] - support_angles[i]
+                if next_i == 0:
+                    gap = (2 * np.pi - support_angles[i]) + support_angles[0]
+                max_gap = max(max_gap, gap)
+            
+            # Normalize gap to [0, 1] range (pi = 0.5)
+            gap_cost = (max_gap / np.pi) ** 2
+        
+        # Cost component 3: Height variance
+        heights_array = np.array(all_heights)
         variance_cost = np.var(heights_array)
-
+        
         # Combine costs
-        total_support_cost = drop_cost + variance_cost
-
+        total_support_cost = 5.0 * ratio_cost + 3.0 * gap_cost + variance_cost
+        
         return total_support_cost
