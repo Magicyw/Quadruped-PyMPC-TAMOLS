@@ -101,7 +101,9 @@ def run_simulation(
     )
 
     # Feet positions and Legs order
-    feet_traj_geom_ids, feet_GRF_geom_ids = None, LegsAttr(FL=-1, FR=-1, RL=-1, RR=-1)
+    feet_traj_geom_ids = None
+    hl_foothold_geom_ids = None  # Store high-level planner foothold visualization IDs
+    feet_GRF_geom_ids = LegsAttr(FL=-1, FR=-1, RL=-1, RR=-1)
     legs_order = ["FL", "FR", "RL", "RR"]
 
     # Create HeightMap -----------------------------------------------------------------------
