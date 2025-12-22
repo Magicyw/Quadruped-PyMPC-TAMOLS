@@ -36,7 +36,9 @@ Features terrain-aware foothold adaptation:
 Features high-level foothold planning with sl1m:
 - **NEW**: sl1m integration for plum piles (dense stepping stones) terrain
 - Plans 4-step rolling horizon for crawl gait on challenging cylindrical obstacles
-- Mode A: Foothold-only planning with reserved interfaces for Mode B (contact schedule)
+- **Mode A**: Foothold-only planning
+- **Mode B**: Full contact schedule + foothold planning (just implemented!)
+- **Visualization**: Color-coded foothold markers in MuJoCo (FL=Red, FR=Green, RL=Blue, RR=Yellow)
 - Automatic constraint enforcement to keep footholds within safe pile tops
 - Graceful fallback to heuristic if sl1m not installed
 - See [sl1m planner usage guide](docs/SL1M_PLANNER_USAGE.md) for details

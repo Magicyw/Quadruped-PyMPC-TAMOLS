@@ -53,6 +53,8 @@ simulation_params = {
         'planner_type': 'sl1m',
         'planning_horizon': 4,  # Number of future steps
         'use_optimization': True,  # Use sl1m if available, else heuristic
+        'mode_b_enabled': False,  # Mode A: footholds only (set True for Mode B)
+        'visualize_footholds': True,  # Show colored foothold markers
         
         'plum_piles': {
             'enabled': True,  # Activate plum piles mode
@@ -186,22 +188,99 @@ High-level planner enabled: sl1m foothold planner for plum piles terrain
 
 ### Mode A: Foothold Planning Only
 
-Currently implemented. The planner:
+Currently operational. The planner:
 - Receives current robot state (position, velocity, contact)
 - Plans footholds for next 4 swing events
 - Returns foothold for currently swinging leg + constraint region
 - Contact schedule still comes from PGG (crawl gait pattern)
 
-### Mode B: Contact Schedule Planning (Future)
+**Configuration**:
+```python
+'high_level_planner': {
+    'enabled': True,
+    'mode_b_enabled': False,  # Mode A
+}
+```
 
-Reserved interfaces exist for sl1m to also generate contact schedules:
-- `HighLevelPlan.contact_schedule`: List of contact arrays
-- `HighLevelPlan.phase_schedule`: Phase timing information
+### Mode B: Full Contact Schedule Planning
 
-To implement Mode B in the future:
-1. Update `Sl1mFootholdPlanner._plan_with_sl1m()` to use sl1m's contact planning
-2. Return `contact_schedule` in `HighLevelPlan`
-3. In `WBInterface`, use `hl_plan.contact_schedule` instead of `self.pgg.compute_contact_sequence()`
+**Now Implemented!** The planner generates both footholds AND contact schedules.
+
+The planner:
+- Plans footholds for next 4 steps
+- Generates contact schedule (which leg swings at each step)
+- For crawl gait: FL → RR → FR → RL sequence
+- Returns contact sequence + phase timing information
+- Overrides PGG contact schedule in WBInterface
+
+**Configuration**:
+```python
+'high_level_planner': {
+    'enabled': True,
+    'mode_b_enabled': True,  # Enable Mode B
+    'planning_horizon': 4,   # Number of steps to plan
+}
+```
+
+**Contact Schedule Format**:
+- `contact_schedule`: List of 4 arrays (one per leg: FL, FR, RL, RR)
+- Each array shape: `(horizon,)` with binary values (1=contact, 0=swing)
+- `phase_schedule`: Dict with timing info (duty_factor=0.8, swing_duration=0.5s, step_freq=0.5Hz)
+
+**Example**: For 4-step horizon:
+```
+Step 0: [0, 1, 1, 1]  # FL swings
+Step 1: [1, 1, 1, 0]  # RR swings  
+Step 2: [1, 0, 1, 1]  # FR swings
+Step 3: [1, 1, 0, 1]  # RL swings
+```
+
+### Foothold Visualization
+
+**Now Available!** Planned footholds are visualized as colored spheres in MuJoCo.
+
+**Features**:
+- Real-time visualization of planned footholds
+- Color-coded by leg:
+  - **FL**: Red 🔴
+  - **FR**: Green 🟢
+  - **RL**: Blue 🔵
+  - **RR**: Yellow 🟡
+- 3cm radius spheres for visibility
+- Updates every planning cycle
+
+**Configuration**:
+```python
+'high_level_planner': {
+    'enabled': True,
+    'visualize_footholds': True,  # Enable visualization (default: True)
+}
+```
+
+**In Simulation**: Visualization is automatic when planner is enabled. The spheres show where the robot plans to step next.
+
+### Mode Comparison
+
+| Feature | Mode A | Mode B |
+|---------|--------|--------|
+| Foothold Planning | ✓ | ✓ |
+| Constraint Regions | ✓ | ✓ |
+| Contact Schedule | From PGG | From Planner |
+| Phase Planning | No | Yes |
+| Gait Adaptation | Limited | Full |
+| Visualization | ✓ | ✓ |
+
+**When to use Mode B**:
+- Complex terrain requiring adaptive gait
+- Need precise swing timing control
+- Optimizing step sequence for efficiency
+- Research on contact planning algorithms
+
+**When Mode A is sufficient**:
+- Standard crawl gait works well
+- Terrain is predictable
+- Simpler implementation
+- Current default configuration
 
 ## Planner Behavior
 
@@ -339,6 +418,8 @@ pip install git+https://github.com/loco-3d/sl1m.git
 
 ## Example: Complete Configuration
 
+### Mode A (Foothold Planning Only)
+
 ```python
 # config.py
 simulation_params = {
@@ -351,6 +432,8 @@ simulation_params = {
         'planner_type': 'sl1m',
         'planning_horizon': 4,
         'use_optimization': True,
+        'mode_b_enabled': False,  # Mode A: footholds only
+        'visualize_footholds': True,
         
         'plum_piles': {
             'enabled': True,
@@ -370,6 +453,43 @@ mpc_params = {
     # use_foothold_constraints auto-enabled
 }
 ```
+
+### Mode B (Full Contact + Foothold Planning)
+
+```python
+# config.py  
+simulation_params = {
+    'gait': 'crawl',
+    'scene': 'simulation/plum_piles_terrain.xml',
+    'visual_foothold_adaptation': 'height',
+    
+    'high_level_planner': {
+        'enabled': True,
+        'planner_type': 'sl1m',
+        'planning_horizon': 4,
+        'use_optimization': True,
+        'mode_b_enabled': True,  # Mode B: contact schedule + footholds
+        'visualize_footholds': True,
+        
+        'plum_piles': {
+            'enabled': True,
+            'x_range': (4.1, 7.1),
+            'y_range': (-0.4, 0.4),
+            'x_step': 0.2,
+            'y_step': 0.2,
+            'radius': 0.08,
+            'height': 0.268,
+            'constraint_radius': 0.06,
+        },
+    },
+}
+
+mpc_params = {
+    'use_foothold_optimization': True,
+}
+```
+
+**Key Difference**: `mode_b_enabled: True` enables contact schedule generation from planner instead of PGG.
 
 ## Testing
 
