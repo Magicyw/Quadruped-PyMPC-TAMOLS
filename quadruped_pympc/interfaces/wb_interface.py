@@ -18,6 +18,19 @@ from quadruped_pympc.helpers.early_stance_detector import EarlyStanceDetector
 if cfg.simulation_params['visual_foothold_adaptation'] != 'blind':
     from quadruped_pympc.helpers.visual_foothold_adaptation import VisualFootholdAdaptation
 
+# High-level planner integration (optional, for plum piles / stepping stones)
+HL_PLANNER_AVAILABLE = False
+if cfg.simulation_params.get('high_level_planner', {}).get('enabled', False):
+    try:
+        from quadruped_pympc.high_level_planners.sl1m_planner import Sl1mFootholdPlanner
+        HL_PLANNER_AVAILABLE = True
+    except ImportError:
+        import warnings
+        warnings.warn(
+            "High-level planner enabled but module not available. Continuing without planner.",
+            ImportWarning
+        )
+
 
 class WBInterface:
     """
@@ -104,6 +117,32 @@ class WBInterface:
 
         self.current_contact = np.array([1, 1, 1, 1])
         self.previous_contact = np.array([1, 1, 1, 1])
+        
+        # High-level planner initialization (if enabled) ------------------------------------------
+        self.hl_planner = None
+        self.hl_planner_enabled = cfg.simulation_params.get('high_level_planner', {}).get('enabled', False)
+        
+        if self.hl_planner_enabled and HL_PLANNER_AVAILABLE:
+            planner_config = cfg.simulation_params['high_level_planner']
+            pile_config = planner_config.get('plum_piles', {})
+            
+            if pile_config.get('enabled', False):
+                # Initialize sl1m planner for plum piles
+                self.hl_planner = Sl1mFootholdPlanner(
+                    pile_config=pile_config,
+                    planning_horizon=planner_config.get('planning_horizon', 4),
+                    use_sl1m=planner_config.get('use_optimization', True),
+                )
+                
+                # Enable foothold constraints in MPC if plum piles mode is active
+                if cfg.mpc_params['use_foothold_optimization']:
+                    cfg.mpc_params['use_foothold_constraints'] = True
+                    print("High-level planner enabled: sl1m foothold planner for plum piles terrain")
+                    print(f"  Planning horizon: {planner_config.get('planning_horizon', 4)} steps")
+                    print(f"  Pile grid: x=[{pile_config['x_range'][0]}, {pile_config['x_range'][1]}], " +
+                          f"y=[{pile_config['y_range'][0]}, {pile_config['y_range'][1]}]")
+                    print(f"  Constraint radius: {pile_config.get('constraint_radius', 0.06)}m")
+
 
     def update_state_and_reference(
         self,
@@ -225,6 +264,36 @@ class WBInterface:
             hips_position=hip_pos,
             com_height_nominal=cfg.simulation_params['ref_z'],
         )
+        
+        # High-level planner override (Mode A: footholds only) ------------------------------------
+        # If planner is enabled, override reference footholds with planned footholds
+        ref_feet_constraints = LegsAttr(FL=None, FR=None, RL=None, RR=None)
+        
+        if self.hl_planner is not None:
+            try:
+                hl_plan = self.hl_planner.plan(
+                    base_position=base_pos,
+                    base_orientation=base_ori_euler_xyz,
+                    base_velocity=base_lin_vel,
+                    feet_positions=feet_pos,
+                    current_contact=self.current_contact,
+                    reference_velocity=ref_base_lin_vel,
+                )
+                
+                # Override reference footholds with planner output
+                for leg in ['FL', 'FR', 'RL', 'RR']:
+                    ref_feet_pos[leg] = hl_plan.footholds[leg].copy()
+                
+                # Store constraint regions for NMPC and heightmap adaptation
+                ref_feet_constraints = hl_plan.foothold_constraints
+                
+                # Pass constraints to visual foothold adaptation (to clamp adaptations)
+                if cfg.simulation_params['visual_foothold_adaptation'] != 'blind':
+                    self.vfa.set_hl_planner_constraints(ref_feet_constraints)
+                    
+            except Exception as e:
+                import warnings
+                warnings.warn(f"High-level planner failed: {e}. Using default foothold reference.", UserWarning)
 
         # Adjust the footholds given the terrain -----------------------------------------------------
         if cfg.simulation_params['visual_foothold_adaptation'] != 'blind':
@@ -240,9 +309,16 @@ class WBInterface:
             if self.stc.check_full_stance_condition(self.current_contact):
                 self.vfa.reset()
 
-            ref_feet_pos, ref_feet_constraints = self.vfa.get_footholds_adapted(ref_feet_pos)
+            ref_feet_pos, vfa_constraints = self.vfa.get_footholds_adapted(ref_feet_pos)
+            
+            # Merge VFA constraints with high-level planner constraints
+            # High-level planner constraints take precedence
+            for leg in ['FL', 'FR', 'RL', 'RR']:
+                if ref_feet_constraints[leg] is None:
+                    ref_feet_constraints[leg] = vfa_constraints[leg]
         else:
-            ref_feet_constraints = LegsAttr(FL=None, FR=None, RL=None, RR=None)
+            # No VFA, use high-level planner constraints if available (already set above)
+            pass
 
         # Estimate the terrain slope and elevation -------------------------------------------------------
         terrain_roll, terrain_pitch, terrain_height = self.terrain_computation.compute_terrain_estimation(

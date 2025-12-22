@@ -292,5 +292,28 @@ simulation_params = {
     #     'downhill_angle': 15.0,
     # }
 
+    # High-level planner configuration (sl1m-based foothold planning)
+    # Enable this for plum piles / stepping stones terrain with dense cylindrical obstacles
+    'high_level_planner': {
+        'enabled': False,  # Set to True to use sl1m foothold planner
+        'planner_type': 'sl1m',  # Currently only 'sl1m' supported
+        'planning_horizon': 4,  # Number of future steps to plan (Mode A: crawl gait)
+        'use_optimization': True,  # Use sl1m optimization if available, else heuristic fallback
+        
+        # Plum piles terrain configuration
+        # These parameters define the dense cylindrical stepping stone grid
+        'plum_piles': {
+            'enabled': False,  # Set to True when using plum piles terrain
+            'x_range': (4.1, 7.1),  # X range for pile grid in world frame (meters)
+            'y_range': (-0.4, 0.4),  # Y range for pile grid in world frame (meters)
+            'x_step': 0.2,  # Spacing between pile centers along x-axis (meters)
+            'y_step': 0.2,  # Spacing between pile centers along y-axis (meters)
+            'radius': 0.08,  # Pile radius (meters)
+            'height': 0.268,  # Height of pile top above ground frame (meters)
+            'constraint_radius': 0.06,  # Allowed foothold radius on pile top (meters)
+                                       # Should be < pile radius to ensure safety margin
+        },
+    },
+
     }
 # -----------------------------------------------------------------------

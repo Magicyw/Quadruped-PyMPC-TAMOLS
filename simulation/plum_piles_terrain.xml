@@ -1,0 +1,107 @@
+<mujoco model="plum_piles_terrain">
+  <asset>
+    <texture name="grid" type="2d" builtin="checker" width="512" height="512" rgb1=".1 .2 .3" rgb2=".2 .3 .4"/>
+    <material name="grid" texture="grid" texrepeat="1 1" texuniform="true" reflectance=".2"/>
+    <material name="pile" rgba=".7 .5 .3 1"/>
+  </asset>
+
+  <worldbody>
+    <light pos="0 0 3" dir="0 0 -1" directional="true"/>
+
+    <!-- Flat starting area (robot spawn point) -->
+    <geom name="flat_start" type="box" pos="1.5 0 0" size="1.5 2.0 0.1" material="grid" friction="1.0 0.005 0.0001"/>
+
+    <!-- Ramp to platform -->
+    <geom name="ramp_up" type="box" pos="3.7244443697168013 0 0.19411428382689055" size="0.75 2.0 0.1" euler="0 15.0 0" material="grid" friction="1.0 0.005 0.0001"/>
+
+    <!-- Platform section -->
+    <geom name="platform" type="box" pos="4.9488887394336025 0 0.536" size="0.5 2.0 0.1" material="grid" friction="1.0 0.005 0.0001"/>
+
+    <!-- Plum piles (dense stepping stones grid) -->
+    <geom name="pile_0" type="cylinder" pos="4.1 -0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_1" type="cylinder" pos="4.1 -0.2 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_2" type="cylinder" pos="4.1 0.0 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_3" type="cylinder" pos="4.1 0.20000000000000007 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_4" type="cylinder" pos="4.1 0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_5" type="cylinder" pos="4.3 -0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_6" type="cylinder" pos="4.3 -0.2 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_7" type="cylinder" pos="4.3 0.0 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_8" type="cylinder" pos="4.3 0.20000000000000007 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_9" type="cylinder" pos="4.3 0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_10" type="cylinder" pos="4.5 -0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_11" type="cylinder" pos="4.5 -0.2 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_12" type="cylinder" pos="4.5 0.0 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_13" type="cylinder" pos="4.5 0.20000000000000007 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_14" type="cylinder" pos="4.5 0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_15" type="cylinder" pos="4.7 -0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_16" type="cylinder" pos="4.7 -0.2 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_17" type="cylinder" pos="4.7 0.0 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_18" type="cylinder" pos="4.7 0.20000000000000007 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_19" type="cylinder" pos="4.7 0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_20" type="cylinder" pos="4.9 -0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_21" type="cylinder" pos="4.9 -0.2 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_22" type="cylinder" pos="4.9 0.0 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_23" type="cylinder" pos="4.9 0.20000000000000007 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_24" type="cylinder" pos="4.9 0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_25" type="cylinder" pos="5.1000000000000005 -0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_26" type="cylinder" pos="5.1000000000000005 -0.2 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_27" type="cylinder" pos="5.1000000000000005 0.0 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_28" type="cylinder" pos="5.1000000000000005 0.20000000000000007 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_29" type="cylinder" pos="5.1000000000000005 0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_30" type="cylinder" pos="5.300000000000001 -0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_31" type="cylinder" pos="5.300000000000001 -0.2 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_32" type="cylinder" pos="5.300000000000001 0.0 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_33" type="cylinder" pos="5.300000000000001 0.20000000000000007 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_34" type="cylinder" pos="5.300000000000001 0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_35" type="cylinder" pos="5.500000000000001 -0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_36" type="cylinder" pos="5.500000000000001 -0.2 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_37" type="cylinder" pos="5.500000000000001 0.0 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_38" type="cylinder" pos="5.500000000000001 0.20000000000000007 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_39" type="cylinder" pos="5.500000000000001 0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_40" type="cylinder" pos="5.700000000000001 -0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_41" type="cylinder" pos="5.700000000000001 -0.2 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_42" type="cylinder" pos="5.700000000000001 0.0 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_43" type="cylinder" pos="5.700000000000001 0.20000000000000007 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_44" type="cylinder" pos="5.700000000000001 0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_45" type="cylinder" pos="5.900000000000001 -0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_46" type="cylinder" pos="5.900000000000001 -0.2 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_47" type="cylinder" pos="5.900000000000001 0.0 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_48" type="cylinder" pos="5.900000000000001 0.20000000000000007 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_49" type="cylinder" pos="5.900000000000001 0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_50" type="cylinder" pos="6.100000000000001 -0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_51" type="cylinder" pos="6.100000000000001 -0.2 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_52" type="cylinder" pos="6.100000000000001 0.0 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_53" type="cylinder" pos="6.100000000000001 0.20000000000000007 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_54" type="cylinder" pos="6.100000000000001 0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_55" type="cylinder" pos="6.300000000000002 -0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_56" type="cylinder" pos="6.300000000000002 -0.2 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_57" type="cylinder" pos="6.300000000000002 0.0 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_58" type="cylinder" pos="6.300000000000002 0.20000000000000007 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_59" type="cylinder" pos="6.300000000000002 0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_60" type="cylinder" pos="6.500000000000002 -0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_61" type="cylinder" pos="6.500000000000002 -0.2 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_62" type="cylinder" pos="6.500000000000002 0.0 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_63" type="cylinder" pos="6.500000000000002 0.20000000000000007 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_64" type="cylinder" pos="6.500000000000002 0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_65" type="cylinder" pos="6.700000000000002 -0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_66" type="cylinder" pos="6.700000000000002 -0.2 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_67" type="cylinder" pos="6.700000000000002 0.0 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_68" type="cylinder" pos="6.700000000000002 0.20000000000000007 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_69" type="cylinder" pos="6.700000000000002 0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_70" type="cylinder" pos="6.900000000000002 -0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_71" type="cylinder" pos="6.900000000000002 -0.2 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_72" type="cylinder" pos="6.900000000000002 0.0 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_73" type="cylinder" pos="6.900000000000002 0.20000000000000007 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_74" type="cylinder" pos="6.900000000000002 0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_75" type="cylinder" pos="7.100000000000002 -0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_76" type="cylinder" pos="7.100000000000002 -0.2 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_77" type="cylinder" pos="7.100000000000002 0.0 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_78" type="cylinder" pos="7.100000000000002 0.20000000000000007 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <geom name="pile_79" type="cylinder" pos="7.100000000000002 0.4 0.134" size="0.08 0.134" material="pile" friction="1.0 0.005 0.0001"/>
+    <!-- Total plum piles: 80 -->
+
+    <!-- Safety ground plane -->
+    <geom name="ground" type="plane" pos="0 0 -1.0" size="50 50 0.1" material="grid" friction="1.0 0.005 0.0001"/>
+
+  </worldbody>
+</mujoco>

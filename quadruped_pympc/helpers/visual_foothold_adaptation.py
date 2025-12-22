@@ -18,6 +18,10 @@ class VisualFootholdAdaptation:
         self.initialized = False
 
         self.adaptation_strategy = adaptation_strategy
+        
+        # High-level planner constraint regions (for plum piles, etc.)
+        # These override local adaptation constraints when set
+        self.hl_planner_constraints = LegsAttr(FL=None, FR=None, RL=None, RR=None)
 
         if self.adaptation_strategy == 'vfa':
             self.vfa_evaluators = LegsAttr(FL=None, FR=None, RL=None, RR=None)
@@ -32,6 +36,14 @@ class VisualFootholdAdaptation:
     def update_footholds_adaptation(self, update_footholds_adaptation):
         self.footholds_adaptation = update_footholds_adaptation
         self.initialized = True
+    
+    def set_hl_planner_constraints(self, constraints: LegsAttr):
+        """Set constraint regions from high-level planner (e.g., for plum piles).
+        
+        Args:
+            constraints: LegsAttr with FootholdConstraintRegion objects for each leg.
+        """
+        self.hl_planner_constraints = constraints
 
     def reset(self):
         self.initialized = False
@@ -42,6 +54,9 @@ class VisualFootholdAdaptation:
             self.footholds_adaptation = reference_footholds
             return reference_footholds, self.footholds_constraints
         else:
+            # Apply high-level planner constraints if set (e.g., clamp to pile tops)
+            if any([self.hl_planner_constraints[leg] is not None for leg in ['FL', 'FR', 'RL', 'RR']]):
+                self._apply_hl_planner_constraints()
             return self.footholds_adaptation, self.footholds_constraints
 
     def get_heightmap_coordinates_foothold_id(self, heightmaps, foothold_id, leg_name):
@@ -463,3 +478,36 @@ class VisualFootholdAdaptation:
         adaptive_height = min(adaptive_height, max_height)
 
         return adaptive_height
+    
+    def _apply_hl_planner_constraints(self):
+        """Apply high-level planner constraint regions to adapted footholds.
+        
+        Clamps XY coordinates of adapted footholds to stay within constraint regions
+        (e.g., pile tops for plum piles terrain). This ensures heightmap adaptation
+        cannot move footholds off safe surfaces.
+        """
+        try:
+            # Import clamp functions from geometry utils
+            from quadruped_pympc.high_level_planners.sl1m_planner.geometry_utils import (
+                clamp_to_circle, clamp_to_box
+            )
+            
+            for leg_name in ['FL', 'FR', 'RL', 'RR']:
+                constraint = self.hl_planner_constraints[leg_name]
+                if constraint is None:
+                    continue
+                
+                foothold = self.footholds_adaptation[leg_name]
+                
+                if constraint.region_type == 'circle':
+                    # Clamp to circular region
+                    clamped = clamp_to_circle(foothold, constraint.center, constraint.radius)
+                    self.footholds_adaptation[leg_name] = clamped
+                elif constraint.region_type == 'box':
+                    # Clamp to box region
+                    clamped = clamp_to_box(foothold, constraint.center, constraint.box_half_size)
+                    self.footholds_adaptation[leg_name] = clamped
+        except ImportError:
+            # If high-level planner not available, skip constraint enforcement
+            pass
+
