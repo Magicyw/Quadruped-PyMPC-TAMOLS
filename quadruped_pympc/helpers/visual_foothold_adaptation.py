@@ -67,6 +67,7 @@ class VisualFootholdAdaptation:
         base_position=None,
         current_contact=None,
         phase_signal=None,
+        current_feet_pos=None,
     ):
         for leg_id, leg_name in enumerate(legs_order):
             if heightmaps[leg_name].data is None:
@@ -129,6 +130,8 @@ class VisualFootholdAdaptation:
             # Store current contact for swing leg detection
             # Default to all swing [0,0,0,0] if not provided (0=swing, 1=stance)
             self.current_contact = current_contact if current_contact is not None else np.array([0, 0, 0, 0])
+            # Store current feet positions (actual contact positions)
+            self.current_feet_pos = current_feet_pos
             
             # TAMOLS-inspired foothold adaptation strategy
             # Performs local search around seed footholds using terrain-aware cost metrics
@@ -156,7 +159,7 @@ class VisualFootholdAdaptation:
 
                     # Compute TAMOLS-inspired cost (including stability)
                     score = self._compute_tamols_score(
-                        candidate, seed_foothold, hip_position, heightmap, leg_id, leg_name, legs_order, reference_footholds
+                        candidate, seed_foothold, hip_position, heightmap, leg_id, leg_name, legs_order
                     )
 
                     if score < best_score:
@@ -235,7 +238,7 @@ class VisualFootholdAdaptation:
 
         return candidates
 
-    def _compute_tamols_score(self, candidate, seed, hip_position, heightmap, leg_id, leg_name, legs_order, reference_footholds):
+    def _compute_tamols_score(self, candidate, seed, hip_position, heightmap, leg_id, leg_name, legs_order):
         """Compute TAMOLS-inspired cost for a candidate foothold.
 
         Combines multiple cost terms inspired by TAMOLS reference (ianpedroza/tamols-rl):
@@ -245,7 +248,7 @@ class VisualFootholdAdaptation:
         - Kinematic reachability: enforces distance bounds (from tamols/constraints.py:add_kinematic_constraints)
         - Nominal kinematics: maintains desired hip height and leg configuration (from tamols/costs.py:add_nominal_kinematic_cost)
         - Reference tracking: tracks desired velocity direction (from tamols/costs.py:add_tracking_cost)
-        - Stability: penalizes candidates that reduce CoM-to-support distance (Scheme 2)
+        - Stability: penalizes candidates that increase CoM distance from support line (Scheme 2)
 
         Args:
             candidate: np.ndarray [x, y, z] candidate foothold in world frame
@@ -255,7 +258,6 @@ class VisualFootholdAdaptation:
             leg_id: int, leg index (0=FL, 1=FR, 2=RL, 3=RR)
             leg_name: str, leg name ('FL', 'FR', 'RL', 'RR')
             legs_order: tuple of leg names
-            reference_footholds: LegsAttr of reference footholds
 
         Returns:
             float: total cost (lower is better)
@@ -314,9 +316,9 @@ class VisualFootholdAdaptation:
         ) * w_tracking
 
         # 7. Stability cost (Scheme 2)
-        # Penalizes candidates that reduce CoM-to-diagonal-support distance
+        # Penalizes candidates that increase CoM distance from diagonal support line
         stability_cost = self._compute_stability_cost(
-            candidate, leg_id, leg_name, legs_order, reference_footholds
+            candidate, leg_id, leg_name, legs_order
         ) * w_stability
 
         # Total cost combines all terms
@@ -493,40 +495,39 @@ class VisualFootholdAdaptation:
 
         return cost
 
-    def _compute_stability_cost(self, candidate, leg_id, leg_name, legs_order, reference_footholds):
+    def _compute_stability_cost(self, candidate, leg_id, leg_name, legs_order):
         """Compute stability cost based on CoM distance to diagonal support line (Scheme 2).
 
         For trot gait, evaluates stability with respect to diagonal pair support segment:
         - FL <-> RR (diagonal pair)
         - FR <-> RL (diagonal pair)
 
-        Computes the distance from CoM projection (xy) to the line segment between
-        the candidate foothold and its diagonal pair's foothold. Applies both hard
-        constraint (reject if distance < margin) and soft penalty.
+        The correct stability criterion for trot is that the CoM should be CLOSE to the 
+        diagonal support line (small distance is good), not far from it. This minimizes 
+        roll moment and maintains stable support polygon.
+
+        Computes the distance from predicted CoM projection (xy) to the line segment between
+        the candidate foothold and its diagonal pair's CURRENT/ACTUAL foothold position.
+        Penalizes candidates that would place CoM FAR from the support line.
 
         Args:
             candidate: np.ndarray [x, y, z] candidate foothold in world frame
             leg_id: int, leg index (0=FL, 1=FR, 2=RL, 3=RR)
             leg_name: str, leg name ('FL', 'FR', 'RL', 'RR')
             legs_order: tuple of leg names
-            reference_footholds: LegsAttr of reference footholds
 
         Returns:
-            float: stability cost (lower is better, or inf for hard constraint violation)
+            float: stability cost (lower is better when CoM is close to support line)
         """
-        # Check if we have base_position for stability computation
+        # Check if we have required data for stability computation
         if not hasattr(self, 'base_position') or self.base_position is None:
-            # No base position available, skip stability check
+            return 0.0
+        if not hasattr(self, 'current_feet_pos') or self.current_feet_pos is None:
             return 0.0
 
         # Load stability parameters
         stability_margin = self.tamols_params.get('stability_margin', 0.06)
-        stability_hard = self.tamols_params.get('stability_hard', False)
-        stability_soft = self.tamols_params.get('stability_soft', True)
-
-        # Get CoM projection in xy plane
-        com_xy = self.base_position[:2]
-
+        
         # Determine diagonal pair for this leg (trot gait diagonal pairing)
         # FL (0) <-> RR (3), FR (1) <-> RL (2)
         diagonal_pairs = {
@@ -537,32 +538,38 @@ class VisualFootholdAdaptation:
         }
 
         if leg_name not in diagonal_pairs:
-            # Unknown leg name, skip stability check
             return 0.0
 
         diagonal_leg_name = diagonal_pairs[leg_name]
 
         # Check if we should apply stability check based on contact state
-        # Only apply when the leg is in swing (being adapted)
+        # Only apply when the current leg is in swing (being adapted)
         if hasattr(self, 'current_contact') and self.current_contact is not None:
             # current_contact is array [FL, FR, RL, RR] with 1=stance, 0=swing
             if leg_id < len(self.current_contact) and self.current_contact[leg_id] == 1:
                 # Leg is in stance, not being adapted, skip stability check
                 return 0.0
 
-        # Get diagonal leg's foothold (use reference foothold as other endpoint)
-        if hasattr(reference_footholds, diagonal_leg_name):
-            diagonal_foothold = getattr(reference_footholds, diagonal_leg_name)
-        else:
-            # Can't find diagonal pair, skip stability check
+        # Get diagonal leg's CURRENT/ACTUAL foothold position (where it's standing now)
+        if not hasattr(self.current_feet_pos, diagonal_leg_name):
             return 0.0
+        diagonal_foothold = getattr(self.current_feet_pos, diagonal_leg_name)
 
-        # Compute distance from CoM to line segment between candidate and diagonal foothold
+        # Predict future CoM position when this foothold will be used
+        # Estimate swing time: approximately (1 - duty_factor) * period
+        # Use a reasonable default if not available
+        swing_time = self.tamols_params.get('estimated_swing_time', 0.25)  # ~0.25s typical
+        
+        # Predict CoM position: current + velocity * time
+        # Use only xy components for 2D stability
+        predicted_com_xy = self.base_position[:2] + self.forward_vel[:2] * swing_time
+
+        # Compute distance from predicted CoM to line segment between candidate and diagonal foothold
         # Line segment: P1 = candidate[:2], P2 = diagonal_foothold[:2]
-        # Point: C = com_xy
+        # Point: C = predicted_com_xy
         p1 = candidate[:2]
         p2 = diagonal_foothold[:2]
-        c = com_xy
+        c = predicted_com_xy
 
         # Vector from P1 to P2
         v = p2 - p1
@@ -581,22 +588,17 @@ class VisualFootholdAdaptation:
             t = np.clip(t, 0.0, 1.0)
             # Closest point on segment
             closest_point = p1 + t * v
-            # Distance from CoM to closest point
+            # Distance from predicted CoM to closest point on support line
             distance = np.linalg.norm(c - closest_point)
 
-        # Apply hard constraint if enabled
-        if stability_hard and distance < stability_margin:
-            # Reject this candidate (return infinite cost)
-            return float('inf')
-
-        # Apply soft penalty if enabled
-        if stability_soft:
-            # Smooth penalty that increases as distance decreases below margin
-            # Use squared penalty for smooth gradient
-            if distance < stability_margin:
-                penalty = (stability_margin - distance) ** 2
-                return penalty
-            else:
-                return 0.0
+        # CORRECT stability criterion: penalize when distance is TOO LARGE
+        # We want CoM close to support line (small distance = stable)
+        # Apply quadratic penalty that increases with distance
+        # No penalty when distance <= stability_margin (acceptable zone)
+        if distance > stability_margin:
+            # CoM is too far from support line, penalize
+            penalty = (distance - stability_margin) ** 2
+            return penalty
         else:
+            # CoM is close to support line (good for stability)
             return 0.0

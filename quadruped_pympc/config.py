@@ -232,6 +232,7 @@ simulation_params = {
         'stability_margin': 0.06,        # [m] minimum safe distance from CoM to diagonal support line
         'stability_hard': False,         # If true, reject candidates violating stability_margin (hard constraint)
         'stability_soft': True,          # If true, apply soft penalty for candidates close to stability_margin
+        'estimated_swing_time': 0.25,    # [s] estimated time until foothold contact (for CoM prediction)
 
         # Nominal kinematic parameters
         'h_des': hip_height,                        # [m] desired hip height for nominal kinematics (go1/go2: 0.25, aliengo: 0.30)
