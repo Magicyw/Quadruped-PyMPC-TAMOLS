@@ -553,7 +553,10 @@ class VisualFootholdAdaptation:
         # Get diagonal leg's CURRENT/ACTUAL foothold position (where it's standing now)
         if not hasattr(self.current_feet_pos, diagonal_leg_name):
             return 0.0
-        diagonal_foothold = getattr(self.current_feet_pos, diagonal_leg_name)
+        try:
+            diagonal_foothold = getattr(self.current_feet_pos, diagonal_leg_name)
+        except (AttributeError, TypeError):
+            return 0.0
 
         # Predict future CoM position when this foothold will be used
         # Estimate swing time: approximately (1 - duty_factor) * period
