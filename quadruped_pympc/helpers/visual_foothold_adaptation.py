@@ -127,6 +127,7 @@ class VisualFootholdAdaptation:
             # Store base position for stability checking
             self.base_position = base_position
             # Store current contact for swing leg detection
+            # Default to all swing [0,0,0,0] if not provided (0=swing, 1=stance)
             self.current_contact = current_contact if current_contact is not None else np.array([0, 0, 0, 0])
             
             # TAMOLS-inspired foothold adaptation strategy
@@ -550,8 +551,8 @@ class VisualFootholdAdaptation:
                 return 0.0
 
         # Get diagonal leg's foothold (use reference foothold as other endpoint)
-        if diagonal_leg_name in reference_footholds.__dict__:
-            diagonal_foothold = reference_footholds[diagonal_leg_name]
+        if hasattr(reference_footholds, diagonal_leg_name):
+            diagonal_foothold = getattr(reference_footholds, diagonal_leg_name)
         else:
             # Can't find diagonal pair, skip stability check
             return 0.0
