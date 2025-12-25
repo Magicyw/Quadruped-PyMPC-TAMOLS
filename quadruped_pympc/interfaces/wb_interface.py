@@ -233,7 +233,8 @@ class WBInterface:
                 for leg_id, leg_name in enumerate(legs_order):
                     heightmaps[leg_name].update_height_map(ref_feet_pos[leg_name], yaw=base_ori_euler_xyz[2])
                 self.vfa.compute_adaptation(
-                    legs_order, ref_feet_pos, hip_pos, heightmaps, base_lin_vel, base_ori_euler_xyz, base_ang_vel
+                    legs_order, ref_feet_pos, hip_pos, heightmaps, base_lin_vel, base_ori_euler_xyz, base_ang_vel,
+                    base_position=base_pos, current_contact=self.current_contact, phase_signal=self.pgg.phase_signal if hasattr(self.pgg, 'phase_signal') else None
                 )
                 # print("Adaptation time: ", time.time() - time_adaptation)
 

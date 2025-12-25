@@ -64,6 +64,9 @@ class VisualFootholdAdaptation:
         forward_vel,
         base_orientation,
         base_orientation_rate,
+        base_position=None,
+        current_contact=None,
+        phase_signal=None,
     ):
         for leg_id, leg_name in enumerate(legs_order):
             if heightmaps[leg_name].data is None:
@@ -121,6 +124,11 @@ class VisualFootholdAdaptation:
         elif self.adaptation_strategy == 'tamols':
             # Store forward velocity for TAMOLS reference tracking
             self.forward_vel = forward_vel
+            # Store base position for stability checking
+            self.base_position = base_position
+            # Store current contact for swing leg detection
+            self.current_contact = current_contact if current_contact is not None else np.array([0, 0, 0, 0])
+            
             # TAMOLS-inspired foothold adaptation strategy
             # Performs local search around seed footholds using terrain-aware cost metrics
 
@@ -130,7 +138,7 @@ class VisualFootholdAdaptation:
                 heightmap = heightmaps[leg_name]
 
                 # Generate candidate footholds around the seed
-                candidates = self._generate_candidates(seed_foothold)
+                candidates = self._generate_candidates(seed_foothold, heightmap)
 
                 # Evaluate each candidate using TAMOLS-inspired cost metrics
                 best_candidate = None
@@ -145,9 +153,9 @@ class VisualFootholdAdaptation:
 
                     candidate[2] = height
 
-                    # Compute TAMOLS-inspired cost
+                    # Compute TAMOLS-inspired cost (including stability)
                     score = self._compute_tamols_score(
-                        candidate, seed_foothold, hip_position, heightmap
+                        candidate, seed_foothold, hip_position, heightmap, leg_id, leg_name, legs_order, reference_footholds
                     )
 
                     if score < best_score:
@@ -178,25 +186,38 @@ class VisualFootholdAdaptation:
 
         return True
 
-    def _generate_candidates(self, seed_foothold):
+    def _generate_candidates(self, seed_foothold, heightmap=None):
         """Generate candidate footholds in a grid around the seed position.
 
         Args:
             seed_foothold: np.ndarray [x, y, z] seed foothold position in world frame
+            heightmap: HeightMap object (optional) for sampling from heightmap data
 
         Returns:
             List of candidate [x, y] positions
         """
+        # If heightmap provided, optionally generate candidates from local window
         if heightmap is not None and heightmap.data is not None:
-            candidates = []
-            rows, cols = heightmap.data.shape[:2]
-            for i in range(rows):
-                for j in range(cols):
-                    # heightmap.data[i][j][0] is [x, y, z]
-                    pos = heightmap.data[i][j][0]
-                    candidates.append([pos[0], pos[1]])
-            return candidates
+            # Generate from a local window around the seed position
+            use_heightmap_sampling = self.tamols_params.get('use_heightmap_sampling', False)
+            if use_heightmap_sampling:
+                candidates = []
+                rows, cols = heightmap.data.shape[:2]
+                # Sample from a local window (to keep it computationally efficient)
+                window_size = self.tamols_params.get('heightmap_window_size', 5)
+                for i in range(max(0, rows // 2 - window_size), min(rows, rows // 2 + window_size)):
+                    for j in range(max(0, cols // 2 - window_size), min(cols, cols // 2 + window_size)):
+                        # heightmap.data[i][j][0] is [x, y, z]
+                        pos = heightmap.data[i][j][0]
+                        # Only include positions within search radius from seed
+                        dist_sq = (pos[0] - seed_foothold[0])**2 + (pos[1] - seed_foothold[1])**2
+                        radius = self.tamols_params.get('search_radius', 0.32)
+                        if dist_sq <= radius**2:
+                            candidates.append([pos[0], pos[1]])
+                if len(candidates) > 0:
+                    return candidates
 
+        # Default: Create regular grid around seed
         radius = self.tamols_params.get('search_radius', 0.32)
         resolution = self.tamols_params.get('search_resolution', 0.04)
 
@@ -213,7 +234,7 @@ class VisualFootholdAdaptation:
 
         return candidates
 
-    def _compute_tamols_score(self, candidate, seed, hip_position, heightmap):
+    def _compute_tamols_score(self, candidate, seed, hip_position, heightmap, leg_id, leg_name, legs_order, reference_footholds):
         """Compute TAMOLS-inspired cost for a candidate foothold.
 
         Combines multiple cost terms inspired by TAMOLS reference (ianpedroza/tamols-rl):
@@ -223,12 +244,17 @@ class VisualFootholdAdaptation:
         - Kinematic reachability: enforces distance bounds (from tamols/constraints.py:add_kinematic_constraints)
         - Nominal kinematics: maintains desired hip height and leg configuration (from tamols/costs.py:add_nominal_kinematic_cost)
         - Reference tracking: tracks desired velocity direction (from tamols/costs.py:add_tracking_cost)
+        - Stability: penalizes candidates that reduce CoM-to-support distance (Scheme 2)
 
         Args:
             candidate: np.ndarray [x, y, z] candidate foothold in world frame
             seed: np.ndarray [x, y, z] seed/reference foothold in world frame
             hip_position: np.ndarray [x, y, z] hip position in world frame
             heightmap: HeightMap object for querying terrain
+            leg_id: int, leg index (0=FL, 1=FR, 2=RL, 3=RR)
+            leg_name: str, leg name ('FL', 'FR', 'RL', 'RR')
+            legs_order: tuple of leg names
+            reference_footholds: LegsAttr of reference footholds
 
         Returns:
             float: total cost (lower is better)
@@ -240,6 +266,7 @@ class VisualFootholdAdaptation:
         w_kin = self.tamols_params.get('weight_kinematic', 10.0)
         w_nominal_kin = self.tamols_params.get('weight_nominal_kinematic', 20.0)
         w_tracking = self.tamols_params.get('weight_reference_tracking', 2.0)
+        w_stability = self.tamols_params.get('weight_stability', 10.0)
 
         # 1. Kinematic reachability cost
         # From TAMOLS: constraints.py:add_kinematic_constraints (lines 130-154)
@@ -285,10 +312,16 @@ class VisualFootholdAdaptation:
             candidate, seed
         ) * w_tracking
 
+        # 7. Stability cost (Scheme 2)
+        # Penalizes candidates that reduce CoM-to-diagonal-support distance
+        stability_cost = self._compute_stability_cost(
+            candidate, leg_id, leg_name, legs_order, reference_footholds
+        ) * w_stability
+
         # Total cost combines all terms
         total_cost = (
             kinematic_cost + edge_cost + roughness_cost + previous_solution_cost +
-            nominal_kinematic_cost + reference_tracking_cost
+            nominal_kinematic_cost + reference_tracking_cost + stability_cost
         )
 
         return total_cost
@@ -459,7 +492,110 @@ class VisualFootholdAdaptation:
 
         return cost
 
-        max_height = base_step_height * max_multiplier
-        adaptive_height = min(adaptive_height, max_height)
+    def _compute_stability_cost(self, candidate, leg_id, leg_name, legs_order, reference_footholds):
+        """Compute stability cost based on CoM distance to diagonal support line (Scheme 2).
 
-        return adaptive_height
+        For trot gait, evaluates stability with respect to diagonal pair support segment:
+        - FL <-> RR (diagonal pair)
+        - FR <-> RL (diagonal pair)
+
+        Computes the distance from CoM projection (xy) to the line segment between
+        the candidate foothold and its diagonal pair's foothold. Applies both hard
+        constraint (reject if distance < margin) and soft penalty.
+
+        Args:
+            candidate: np.ndarray [x, y, z] candidate foothold in world frame
+            leg_id: int, leg index (0=FL, 1=FR, 2=RL, 3=RR)
+            leg_name: str, leg name ('FL', 'FR', 'RL', 'RR')
+            legs_order: tuple of leg names
+            reference_footholds: LegsAttr of reference footholds
+
+        Returns:
+            float: stability cost (lower is better, or inf for hard constraint violation)
+        """
+        # Check if we have base_position for stability computation
+        if not hasattr(self, 'base_position') or self.base_position is None:
+            # No base position available, skip stability check
+            return 0.0
+
+        # Load stability parameters
+        stability_margin = self.tamols_params.get('stability_margin', 0.06)
+        stability_hard = self.tamols_params.get('stability_hard', False)
+        stability_soft = self.tamols_params.get('stability_soft', True)
+
+        # Get CoM projection in xy plane
+        com_xy = self.base_position[:2]
+
+        # Determine diagonal pair for this leg (trot gait diagonal pairing)
+        # FL (0) <-> RR (3), FR (1) <-> RL (2)
+        diagonal_pairs = {
+            'FL': 'RR',
+            'FR': 'RL',
+            'RL': 'FR',
+            'RR': 'FL'
+        }
+
+        if leg_name not in diagonal_pairs:
+            # Unknown leg name, skip stability check
+            return 0.0
+
+        diagonal_leg_name = diagonal_pairs[leg_name]
+
+        # Check if we should apply stability check based on contact state
+        # Only apply when the leg is in swing (being adapted)
+        if hasattr(self, 'current_contact') and self.current_contact is not None:
+            # current_contact is array [FL, FR, RL, RR] with 1=stance, 0=swing
+            if leg_id < len(self.current_contact) and self.current_contact[leg_id] == 1:
+                # Leg is in stance, not being adapted, skip stability check
+                return 0.0
+
+        # Get diagonal leg's foothold (use reference foothold as other endpoint)
+        if diagonal_leg_name in reference_footholds.__dict__:
+            diagonal_foothold = reference_footholds[diagonal_leg_name]
+        else:
+            # Can't find diagonal pair, skip stability check
+            return 0.0
+
+        # Compute distance from CoM to line segment between candidate and diagonal foothold
+        # Line segment: P1 = candidate[:2], P2 = diagonal_foothold[:2]
+        # Point: C = com_xy
+        p1 = candidate[:2]
+        p2 = diagonal_foothold[:2]
+        c = com_xy
+
+        # Vector from P1 to P2
+        v = p2 - p1
+        # Vector from P1 to C
+        w = c - p1
+
+        # Compute projection parameter t
+        v_dot_v = np.dot(v, v)
+        if v_dot_v < 1e-8:
+            # P1 and P2 are essentially the same point, use distance to P1
+            distance = np.linalg.norm(c - p1)
+        else:
+            # Parameter t for projection onto line (not segment yet)
+            t = np.dot(w, v) / v_dot_v
+            # Clamp t to [0, 1] for line segment
+            t = np.clip(t, 0.0, 1.0)
+            # Closest point on segment
+            closest_point = p1 + t * v
+            # Distance from CoM to closest point
+            distance = np.linalg.norm(c - closest_point)
+
+        # Apply hard constraint if enabled
+        if stability_hard and distance < stability_margin:
+            # Reject this candidate (return infinite cost)
+            return float('inf')
+
+        # Apply soft penalty if enabled
+        if stability_soft:
+            # Smooth penalty that increases as distance decreases below margin
+            # Use squared penalty for smooth gradient
+            if distance < stability_margin:
+                penalty = (stability_margin - distance) ** 2
+                return penalty
+            else:
+                return 0.0
+        else:
+            return 0.0

@@ -213,6 +213,11 @@ simulation_params = {
         'search_resolution': 0.04,       # [m] grid step size for candidate sampling
         'patch_size': 3,                 # number of neighboring heightmap points to sample for gradient estimation
         'gradient_delta': 0.04,          # [m] offset for finite difference gradient estimation = search_resolution
+        
+        # Optional: Use heightmap data directly for candidate generation
+        'use_heightmap_sampling': False,  # If true, sample candidates from heightmap data
+        'heightmap_window_size': 5,       # Window size for heightmap sampling (rows/cols around center)
+        
         # Cost function weights (higher = more penalty)
         # Aligned with TAMOLS reference implementation (ianpedroza/tamols-rl)
         'weight_edge_avoidance': 15.0,         # from tamols/costs.py:add_edge_avoidance_cost
@@ -221,6 +226,12 @@ simulation_params = {
         'weight_kinematic': 10.0,             # from tamols/constraints.py:add_kinematic_constraints
         'weight_nominal_kinematic': 1.0,     # from tamols/costs.py:add_nominal_kinematic_cost (GIA: maintains hip height)
         'weight_reference_tracking': 5.0,     # from tamols/costs.py:add_tracking_cost (GIA: tracks velocity, prevents standing still)
+        
+        # Stability parameters (Scheme 2: stability-coupled foothold adaptation)
+        'weight_stability': 10.0,        # Weight for stability cost (CoM-to-support distance penalty)
+        'stability_margin': 0.06,        # [m] minimum safe distance from CoM to diagonal support line
+        'stability_hard': False,         # If true, reject candidates violating stability_margin (hard constraint)
+        'stability_soft': True,          # If true, apply soft penalty for candidates close to stability_margin
 
         # Nominal kinematic parameters
         'h_des': hip_height,                        # [m] desired hip height for nominal kinematics (go1/go2: 0.25, aliengo: 0.30)
