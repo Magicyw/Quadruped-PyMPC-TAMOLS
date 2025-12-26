@@ -115,9 +115,10 @@ class VideoRecorder:
         if not self.is_recording:
             return
         
-        # Copy camera settings from viewer
+        # Copy camera settings from viewer using MuJoCo's copy function
         if hasattr(self.viewer, 'cam'):
-            self.camera = self.viewer.cam
+            # Use MuJoCo's camera copy function to avoid reference issues
+            mujoco.mjv_copyCamera(self.model, self.camera, self.viewer.cam)
         
         # Update scene
         mujoco.mjv_updateScene(
@@ -176,7 +177,7 @@ class VideoRecorder:
             print(f"❌ Error saving video: {e}")
         
         # Clear frames to free memory
-        self.frames = []
+        self.frames.clear()
 
     def cleanup(self):
         """Cleanup and save any remaining recording."""

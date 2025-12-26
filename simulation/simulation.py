@@ -31,6 +31,10 @@ from simulation.scene_loader import load_scene_for_quadruped_env
 def keyboard_listener(video_recorder, stop_event):
     """Listen for keyboard input in a separate thread.
     
+    This function runs in a daemon thread and listens for the 'V' key to toggle
+    video recording. The readchar.readchar() call is blocking, but since this runs
+    as a daemon thread, it will be automatically terminated when the main program exits.
+    
     Args:
         video_recorder: VideoRecorder instance to control
         stop_event: Threading event to signal when to stop listening
@@ -41,11 +45,9 @@ def keyboard_listener(video_recorder, stop_event):
         
         while not stop_event.is_set():
             try:
-                # Check if we should stop before blocking on read
-                if stop_event.is_set():
-                    break
-                
-                # Read a single character (blocking)
+                # Note: readchar.readchar() is blocking with no timeout.
+                # However, this runs in a daemon thread, so it won't prevent
+                # the program from exiting when the simulation ends.
                 key = readchar.readchar()
                 if key and key.lower() == 'v':
                     video_recorder.toggle_recording()
@@ -53,7 +55,9 @@ def keyboard_listener(video_recorder, stop_event):
                 # Handle Ctrl+C gracefully
                 break
             except Exception:
-                # Handle any read errors
+                # Handle any read errors (e.g., EOF)
+                if stop_event.is_set():
+                    break
                 time.sleep(0.1)
     except ImportError:
         print("⚠️  readchar not available. Video recording toggle via keyboard disabled.")
