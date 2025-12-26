@@ -43,6 +43,8 @@ dependencies = [
     "cmake",
     "mujoco>=3.3.1",
     "gym_quadruped @ git+https://github.com/iit-DLSLab/gym-quadruped.git",
+    "imageio",
+    "imageio-ffmpeg",
 ]
 
 [project.optional-dependencies]
