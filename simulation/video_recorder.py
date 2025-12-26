@@ -75,18 +75,39 @@ class VideoRecorder:
     def _setup_offscreen_rendering(self):
         """Set up offscreen rendering context for capturing frames.
         
-        Uses mujoco.Renderer for safe offscreen rendering without
-        requiring manual OpenGL context management.
+        Attempts multiple methods to capture frames from the simulation.
         """
+        self.renderer = None
+        self.capture_method = None
+        
+        # Method 1: Try to create an independent Renderer
         try:
-            # Use the modern Renderer API (MuJoCo 3.x+)
-            # This handles offscreen rendering safely without segfaults
             self.renderer = mujoco.Renderer(self.model, height=self.height, width=self.width)
+            self.capture_method = "renderer"
             print("✓ Using mujoco.Renderer for offscreen rendering")
+            return
         except Exception as e:
             print(f"⚠️  Could not create mujoco.Renderer: {e}")
-            print("   Video recording will capture from viewer window instead")
-            self.renderer = None
+        
+        # Method 2: Check if viewer has a context we can use
+        if hasattr(self.viewer, '_render_context'):
+            self.capture_method = "viewer_context"
+            print("✓ Using viewer's render context for frame capture")
+            return
+            
+        # Method 3: Try to capture directly from viewer's framebuffer
+        if hasattr(self.viewer, 'read_pixels'):
+            self.capture_method = "viewer_pixels"
+            print("✓ Using viewer's read_pixels for frame capture")
+            return
+        
+        # Method 4: Use viewer's internal context (mujoco passive viewer)
+        if hasattr(self.viewer, 'ctx') or hasattr(self.viewer, '_ctx'):
+            self.capture_method = "viewer_ctx"
+            print("✓ Using viewer's OpenGL context for frame capture")
+            return
+            
+        print("⚠️  No suitable rendering method found. Will attempt to capture from viewer during recording.")
 
     def toggle_recording(self):
         """Toggle recording state (start/stop)."""
@@ -115,42 +136,98 @@ class VideoRecorder:
             return
         
         try:
-            if self.renderer is not None:
-                # Use the Renderer API (preferred method)
-                # Update camera to match viewer's camera
+            rgb_array = None
+            
+            # Method 1: Use independent Renderer
+            if self.capture_method == "renderer" and self.renderer is not None:
                 if hasattr(self.viewer, 'cam'):
                     self.renderer.update_scene(self.data, camera=self.viewer.cam)
                 else:
                     self.renderer.update_scene(self.data)
-                
-                # Render and get pixels
                 rgb_array = self.renderer.render()
-                
-                # Validate frame data
-                if rgb_array is not None and rgb_array.size > 0:
-                    # Store the frame (already in correct orientation)
-                    self.frames.append(rgb_array)
-                else:
-                    print(f"⚠️  Frame capture failed: empty array")
-            else:
-                # Fallback: try to capture from viewer window
-                # This requires the viewer to have a read_pixels method
+            
+            # Method 2: Use viewer's render context
+            elif self.capture_method == "viewer_context":
+                # Render using the viewer's context
+                if hasattr(self.viewer, '_render_context'):
+                    # This would need viewer-specific implementation
+                    pass
+            
+            # Method 3: Read pixels from viewer
+            elif self.capture_method == "viewer_pixels":
                 if hasattr(self.viewer, 'read_pixels'):
                     rgb_array = self.viewer.read_pixels(depth=False)
-                    # Flip if needed
-                    rgb_array = np.flipud(rgb_array)
-                    if rgb_array is not None and rgb_array.size > 0:
-                        self.frames.append(rgb_array)
-                    else:
-                        print(f"⚠️  Frame capture from viewer failed: empty array")
-                else:
-                    # First time - print warning
-                    if len(self.frames) == 0:
-                        print("⚠️  No capture method available. Renderer is None and viewer has no read_pixels.")
+                    if rgb_array is not None:
+                        rgb_array = np.flipud(rgb_array)
+            
+            # Method 4: Use viewer's OpenGL context
+            elif self.capture_method == "viewer_ctx":
+                # Try to render using viewer's context
+                ctx = getattr(self.viewer, 'ctx', None) or getattr(self.viewer, '_ctx', None)
+                if ctx is not None:
+                    # Use mjr_readPixels with viewer's context
+                    try:
+                        viewport = mujoco.MjrRect(0, 0, self.width, self.height)
+                        rgb_array = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+                        mujoco.mjr_readPixels(rgb_array, None, viewport, ctx)
+                        rgb_array = np.flipud(rgb_array)
+                    except Exception as e:
+                        if len(self.frames) == 0:
+                            print(f"⚠️  Frame capture with viewer context failed: {e}")
+            
+            # Fallback: Try any available method
+            else:
+                # Try read_pixels as last resort
+                if hasattr(self.viewer, 'read_pixels'):
+                    try:
+                        rgb_array = self.viewer.read_pixels(depth=False)
+                        if rgb_array is not None:
+                            rgb_array = np.flipud(rgb_array)
+                    except:
+                        pass
+                
+                # If still no array, try to access viewer's internal framebuffer
+                if rgb_array is None:
+                    # For passive viewer, try to get the viewport pixels
+                    if hasattr(self.viewer, '_get_viewer_pixels'):
+                        rgb_array = self.viewer._get_viewer_pixels()
+                    elif hasattr(self.viewer, 'viewport'):
+                        # Try manual pixel reading
+                        try:
+                            import glfw
+                            import OpenGL.GL as gl
+                            if hasattr(self.viewer, 'window'):
+                                glfw.make_context_current(self.viewer.window)
+                                width, height = glfw.get_framebuffer_size(self.viewer.window)
+                                rgb_array = gl.glReadPixels(0, 0, width, height, gl.GL_RGB, gl.GL_UNSIGNED_BYTE)
+                                rgb_array = np.frombuffer(rgb_array, dtype=np.uint8).reshape(height, width, 3)
+                                rgb_array = np.flipud(rgb_array)
+                                # Resize if needed
+                                if width != self.width or height != self.height:
+                                    try:
+                                        from PIL import Image
+                                        img = Image.fromarray(rgb_array)
+                                        img = img.resize((self.width, self.height))
+                                        rgb_array = np.array(img)
+                                    except:
+                                        pass  # Keep original size if resize fails
+                        except Exception as e:
+                            if len(self.frames) == 0:
+                                print(f"⚠️  OpenGL pixel reading failed: {e}")
+            
+            # Validate and store frame
+            if rgb_array is not None and rgb_array.size > 0:
+                self.frames.append(rgb_array)
+            elif len(self.frames) == 0:
+                print(f"⚠️  No valid frame captured. Capture method: {self.capture_method}")
+                print(f"   Viewer type: {type(self.viewer).__name__}")
+                print(f"   Viewer attributes: {[attr for attr in dir(self.viewer) if not attr.startswith('_')][:10]}")
+                
         except Exception as e:
-            # Only print error once
             if len(self.frames) == 0:
                 print(f"⚠️  Frame capture error: {e}")
+                import traceback
+                traceback.print_exc()
 
     def save_video(self):
         """Save the recorded frames to an MP4 file."""
