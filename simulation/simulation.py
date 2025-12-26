@@ -41,12 +41,19 @@ def keyboard_listener(video_recorder, stop_event):
         
         while not stop_event.is_set():
             try:
-                # Non-blocking read with timeout
+                # Check if we should stop before blocking on read
+                if stop_event.is_set():
+                    break
+                
+                # Read a single character (blocking)
                 key = readchar.readchar()
-                if key.lower() == 'v':
+                if key and key.lower() == 'v':
                     video_recorder.toggle_recording()
-            except:
-                # Handle timeout or other read errors
+            except KeyboardInterrupt:
+                # Handle Ctrl+C gracefully
+                break
+            except Exception:
+                # Handle any read errors
                 time.sleep(0.1)
     except ImportError:
         print("⚠️  readchar not available. Video recording toggle via keyboard disabled.")
