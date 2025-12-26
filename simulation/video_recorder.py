@@ -89,19 +89,31 @@ class VideoRecorder:
         except Exception as e:
             print(f"⚠️  Could not create mujoco.Renderer: {e}")
         
-        # Method 2: Check if viewer has a context we can use
+        # Method 2: For MuJoCo passive viewer Handle, use viewer's model
+        # The Handle object has .m (model) and .d (data) attributes
+        if hasattr(self.viewer, 'm') and hasattr(self.viewer, 'd'):
+            try:
+                # Try to create renderer with viewer's model
+                self.renderer = mujoco.Renderer(self.viewer.m, height=self.height, width=self.width)
+                self.capture_method = "handle_renderer"
+                print("✓ Using mujoco.Renderer with viewer's model (Handle)")
+                return
+            except Exception as e:
+                print(f"⚠️  Could not create Renderer with viewer's model: {e}")
+        
+        # Method 3: Check if viewer has a context we can use
         if hasattr(self.viewer, '_render_context'):
             self.capture_method = "viewer_context"
             print("✓ Using viewer's render context for frame capture")
             return
             
-        # Method 3: Try to capture directly from viewer's framebuffer
+        # Method 4: Try to capture directly from viewer's framebuffer
         if hasattr(self.viewer, 'read_pixels'):
             self.capture_method = "viewer_pixels"
             print("✓ Using viewer's read_pixels for frame capture")
             return
         
-        # Method 4: Use viewer's internal context (mujoco passive viewer)
+        # Method 5: Use viewer's internal context (mujoco passive viewer)
         if hasattr(self.viewer, 'ctx') or hasattr(self.viewer, '_ctx'):
             self.capture_method = "viewer_ctx"
             print("✓ Using viewer's OpenGL context for frame capture")
@@ -146,21 +158,31 @@ class VideoRecorder:
                     self.renderer.update_scene(self.data)
                 rgb_array = self.renderer.render()
             
-            # Method 2: Use viewer's render context
+            # Method 2: Use Renderer with viewer's model (Handle type)
+            elif self.capture_method == "handle_renderer" and self.renderer is not None:
+                # For MuJoCo passive viewer Handle, use viewer's data and camera
+                if hasattr(self.viewer, 'd') and hasattr(self.viewer, 'cam'):
+                    self.renderer.update_scene(self.viewer.d, camera=self.viewer.cam)
+                    rgb_array = self.renderer.render()
+                elif hasattr(self.viewer, 'd'):
+                    self.renderer.update_scene(self.viewer.d)
+                    rgb_array = self.renderer.render()
+            
+            # Method 3: Use viewer's render context
             elif self.capture_method == "viewer_context":
                 # Render using the viewer's context
                 if hasattr(self.viewer, '_render_context'):
                     # This would need viewer-specific implementation
                     pass
             
-            # Method 3: Read pixels from viewer
+            # Method 4: Read pixels from viewer
             elif self.capture_method == "viewer_pixels":
                 if hasattr(self.viewer, 'read_pixels'):
                     rgb_array = self.viewer.read_pixels(depth=False)
                     if rgb_array is not None:
                         rgb_array = np.flipud(rgb_array)
             
-            # Method 4: Use viewer's OpenGL context
+            # Method 5: Use viewer's OpenGL context
             elif self.capture_method == "viewer_ctx":
                 # Try to render using viewer's context
                 ctx = getattr(self.viewer, 'ctx', None) or getattr(self.viewer, '_ctx', None)
