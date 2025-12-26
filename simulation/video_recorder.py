@@ -114,34 +114,43 @@ class VideoRecorder:
         if not self.is_recording:
             return
         
-        if self.renderer is not None:
-            # Use the Renderer API (preferred method)
-            # Update camera to match viewer's camera
-            if hasattr(self.viewer, 'cam'):
-                self.renderer.update_scene(self.data, camera=self.viewer.cam)
+        try:
+            if self.renderer is not None:
+                # Use the Renderer API (preferred method)
+                # Update camera to match viewer's camera
+                if hasattr(self.viewer, 'cam'):
+                    self.renderer.update_scene(self.data, camera=self.viewer.cam)
+                else:
+                    self.renderer.update_scene(self.data)
+                
+                # Render and get pixels
+                rgb_array = self.renderer.render()
+                
+                # Validate frame data
+                if rgb_array is not None and rgb_array.size > 0:
+                    # Store the frame (already in correct orientation)
+                    self.frames.append(rgb_array)
+                else:
+                    print(f"⚠️  Frame capture failed: empty array")
             else:
-                self.renderer.update_scene(self.data)
-            
-            # Render and get pixels
-            rgb_array = self.renderer.render()
-            
-            # Store the frame (already in correct orientation)
-            self.frames.append(rgb_array)
-        else:
-            # Fallback: try to capture from viewer window
-            # This requires the viewer to have a read_pixels method
-            try:
+                # Fallback: try to capture from viewer window
+                # This requires the viewer to have a read_pixels method
                 if hasattr(self.viewer, 'read_pixels'):
                     rgb_array = self.viewer.read_pixels(depth=False)
                     # Flip if needed
                     rgb_array = np.flipud(rgb_array)
-                    self.frames.append(rgb_array)
+                    if rgb_array is not None and rgb_array.size > 0:
+                        self.frames.append(rgb_array)
+                    else:
+                        print(f"⚠️  Frame capture from viewer failed: empty array")
                 else:
-                    # Cannot capture - silently skip
-                    pass
-            except Exception as e:
-                # Silently skip if capture fails
-                pass
+                    # First time - print warning
+                    if len(self.frames) == 0:
+                        print("⚠️  No capture method available. Renderer is None and viewer has no read_pixels.")
+        except Exception as e:
+            # Only print error once
+            if len(self.frames) == 0:
+                print(f"⚠️  Frame capture error: {e}")
 
     def save_video(self):
         """Save the recorded frames to an MP4 file."""

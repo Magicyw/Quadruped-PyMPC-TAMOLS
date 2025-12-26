@@ -32,8 +32,7 @@ def keyboard_listener(video_recorder, stop_event):
     """Listen for keyboard input in a separate thread.
     
     This function runs in a daemon thread and listens for the 'V' key to toggle
-    video recording. The readchar.readchar() call is blocking, but since this runs
-    as a daemon thread, it will be automatically terminated when the main program exits.
+    video recording. Uses a simple polling approach to avoid blocking Ctrl+C.
     
     Args:
         video_recorder: VideoRecorder instance to control
@@ -42,23 +41,27 @@ def keyboard_listener(video_recorder, stop_event):
     try:
         import readchar
         print("\n[Keyboard Listener] Press 'V' or 'v' to toggle video recording")
+        print("[Keyboard Listener] Press Ctrl+C to exit")
         
         while not stop_event.is_set():
             try:
-                # Note: readchar.readchar() is blocking with no timeout.
-                # However, this runs in a daemon thread, so it won't prevent
-                # the program from exiting when the simulation ends.
-                key = readchar.readchar()
+                # Use readkey which is less blocking than readchar
+                key = readchar.readkey()
                 if key and key.lower() == 'v':
                     video_recorder.toggle_recording()
             except KeyboardInterrupt:
-                # Handle Ctrl+C gracefully
-                break
+                # Re-raise to ensure it propagates
+                raise
             except Exception:
                 # Handle any read errors (e.g., EOF)
                 if stop_event.is_set():
                     break
                 time.sleep(0.1)
+    except KeyboardInterrupt:
+        # Propagate the interrupt to the main thread
+        import os
+        import signal
+        os.kill(os.getpid(), signal.SIGINT)
     except ImportError:
         print("⚠️  readchar not available. Video recording toggle via keyboard disabled.")
         print("   Install with: pip install readchar")
