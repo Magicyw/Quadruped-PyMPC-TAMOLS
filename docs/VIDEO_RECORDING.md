@@ -79,13 +79,15 @@ video_recorder = VideoRecorder(
 
 ### Offscreen Rendering
 
-The video recorder uses MuJoCo's offscreen rendering capabilities to capture frames without interfering with the main viewer window:
+The video recorder uses MuJoCo's modern `Renderer` API for safe offscreen rendering:
 
-1. Creates an offscreen OpenGL context using `mujoco.MjrContext`
-2. Copies the camera configuration from the main viewer
-3. Renders the scene to the offscreen buffer
-4. Reads pixels using `mujoco.mjr_readPixels`
-5. Flips the image vertically (MuJoCo uses OpenGL coordinates)
+1. Creates a `mujoco.Renderer` instance with specified resolution
+2. Updates the scene with current simulation data
+3. Copies camera configuration from the main viewer
+4. Renders the scene to an offscreen buffer
+5. Retrieves RGB pixels in the correct orientation
+
+This approach avoids segmentation faults that can occur with manual OpenGL context management.
 
 ### Keyboard Input
 

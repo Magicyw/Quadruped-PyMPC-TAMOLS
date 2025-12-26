@@ -73,21 +73,20 @@ class VideoRecorder:
         print("Press 'V' to start/stop recording")
 
     def _setup_offscreen_rendering(self):
-        """Set up offscreen rendering context for capturing frames."""
-        # Create an offscreen OpenGL context
-        self.offscreen_context = mujoco.MjrContext(self.model, mujoco.mjtFontScale.mjFONTSCALE_150)
+        """Set up offscreen rendering context for capturing frames.
         
-        # Create a viewport for offscreen rendering
-        self.viewport = mujoco.MjrRect(0, 0, self.width, self.height)
-        
-        # Create a scene for rendering
-        self.scene = mujoco.MjvScene(self.model, maxgeom=10000)
-        
-        # Create camera
-        self.camera = mujoco.MjvCamera()
-        
-        # Create rendering options (copy from viewer if available)
-        self.render_options = mujoco.MjvOption()
+        Uses mujoco.Renderer for safe offscreen rendering without
+        requiring manual OpenGL context management.
+        """
+        try:
+            # Use the modern Renderer API (MuJoCo 3.x+)
+            # This handles offscreen rendering safely without segfaults
+            self.renderer = mujoco.Renderer(self.model, height=self.height, width=self.width)
+            print("✓ Using mujoco.Renderer for offscreen rendering")
+        except Exception as e:
+            print(f"⚠️  Could not create mujoco.Renderer: {e}")
+            print("   Video recording will capture from viewer window instead")
+            self.renderer = None
 
     def toggle_recording(self):
         """Toggle recording state (start/stop)."""
@@ -115,34 +114,34 @@ class VideoRecorder:
         if not self.is_recording:
             return
         
-        # Copy camera settings from viewer using MuJoCo's copy function
-        if hasattr(self.viewer, 'cam'):
-            # Use MuJoCo's camera copy function to avoid reference issues
-            mujoco.mjv_copyCamera(self.model, self.camera, self.viewer.cam)
-        
-        # Update scene
-        mujoco.mjv_updateScene(
-            self.model,
-            self.data,
-            self.render_options,
-            None,  # No perturbation
-            self.camera,
-            mujoco.mjtCatBit.mjCAT_ALL,
-            self.scene,
-        )
-        
-        # Render the scene to offscreen buffer
-        mujoco.mjr_render(self.viewport, self.scene, self.offscreen_context)
-        
-        # Read pixels from the offscreen buffer
-        rgb_array = np.zeros((self.height, self.width, 3), dtype=np.uint8)
-        mujoco.mjr_readPixels(rgb_array, None, self.viewport, self.offscreen_context)
-        
-        # Flip image vertically (MuJoCo uses OpenGL convention with origin at bottom-left)
-        rgb_array = np.flipud(rgb_array)
-        
-        # Store the frame
-        self.frames.append(rgb_array)
+        if self.renderer is not None:
+            # Use the Renderer API (preferred method)
+            # Update camera to match viewer's camera
+            if hasattr(self.viewer, 'cam'):
+                self.renderer.update_scene(self.data, camera=self.viewer.cam)
+            else:
+                self.renderer.update_scene(self.data)
+            
+            # Render and get pixels
+            rgb_array = self.renderer.render()
+            
+            # Store the frame (already in correct orientation)
+            self.frames.append(rgb_array)
+        else:
+            # Fallback: try to capture from viewer window
+            # This requires the viewer to have a read_pixels method
+            try:
+                if hasattr(self.viewer, 'read_pixels'):
+                    rgb_array = self.viewer.read_pixels(depth=False)
+                    # Flip if needed
+                    rgb_array = np.flipud(rgb_array)
+                    self.frames.append(rgb_array)
+                else:
+                    # Cannot capture - silently skip
+                    pass
+            except Exception as e:
+                # Silently skip if capture fails
+                pass
 
     def save_video(self):
         """Save the recorded frames to an MP4 file."""
@@ -186,8 +185,7 @@ class VideoRecorder:
             self.is_recording = False
             self.save_video()
         
-        # Free offscreen context
-        if hasattr(self, 'offscreen_context'):
-            del self.offscreen_context
-        if hasattr(self, 'scene'):
-            del self.scene
+        # Free renderer resources
+        if hasattr(self, 'renderer') and self.renderer is not None:
+            self.renderer.close()
+            del self.renderer
