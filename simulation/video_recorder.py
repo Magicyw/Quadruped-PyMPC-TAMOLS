@@ -83,17 +83,44 @@ class VideoRecorder:
             print("📹 VideoRecorder: Using provided model and data")
         
         # Create offscreen renderer
+        print(f"🔧 Attempting to create mujoco.Renderer({self.width}x{self.height})...")
+        print(f"   Model type: {type(self.model)}")
+        print(f"   Has model: {self.model is not None}")
+        
+        self.renderer = None
+        
+        # Try to create renderer with original dimensions
         try:
             self.renderer = mujoco.Renderer(self.model, height=self.height, width=self.width)
-            print(f"✓ VideoRecorder initialized: {self.width}x{self.height} @ {self.fps} FPS")
-            print(f"  Output directory: {self.output_dir.absolute()}")
-            print("  Press 'V' to start/stop recording")
+            print(f"✅ VideoRecorder initialized: {self.width}x{self.height} @ {self.fps} FPS")
+            print(f"   Output directory: {self.output_dir.absolute()}")
+            print(f"   Press 'V' to start/stop recording")
         except Exception as e:
-            print(f"❌ Failed to create video renderer: {e}")
-            self.renderer = None
+            print(f"⚠️  Failed to create renderer with {self.width}x{self.height}: {e}")
+            
+            # Try with smaller dimensions as fallback
+            try:
+                fallback_width, fallback_height = 1280, 720
+                print(f"🔧 Trying fallback dimensions: {fallback_width}x{fallback_height}...")
+                self.renderer = mujoco.Renderer(self.model, height=fallback_height, width=fallback_width)
+                self.width = fallback_width
+                self.height = fallback_height
+                print(f"✅ VideoRecorder initialized with fallback: {self.width}x{self.height} @ {self.fps} FPS")
+                print(f"   Output directory: {self.output_dir.absolute()}")
+                print(f"   Press 'V' to start/stop recording")
+            except Exception as e2:
+                print(f"❌ Failed to create mujoco.Renderer even with fallback: {e2}")
+                print(f"   Error type: {type(e2).__name__}")
+                import traceback
+                print("   Full error traceback:")
+                traceback.print_exc()
+                self.renderer = None
+                print(f"   ⚠️  Video recording will NOT be available")
         
-        print(f"VideoRecorder initialized. Output directory: {self.output_dir.absolute()}")
-        print("Press 'V' to start/stop recording")
+        if self.renderer is None:
+            print(f"\n⚠️  VideoRecorder: Renderer creation failed")
+            print(f"   Output directory: {self.output_dir.absolute()}")
+            print(f"   Video recording is DISABLED - press 'V' will show error message")
 
     def toggle_recording(self):
         """Toggle recording state (start/stop)."""
@@ -109,6 +136,12 @@ class VideoRecorder:
             # Start recording
             if self.renderer is None:
                 print("❌ Cannot start recording: Renderer not available")
+                print("   The mujoco.Renderer failed to initialize during setup.")
+                print("   Check the error messages above for details.")
+                print("   Possible causes:")
+                print("   - OpenGL/display issues")
+                print("   - MuJoCo version compatibility")
+                print("   - System graphics drivers")
                 return
             self.is_recording = True
             self.frames = []
