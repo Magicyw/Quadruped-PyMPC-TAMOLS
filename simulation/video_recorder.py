@@ -3,7 +3,7 @@
 This module provides functionality to record videos from MuJoCo simulations
 by capturing frames using offscreen rendering and saving them as MP4 files.
 
-Based on standard MuJoCo recording patterns.
+Based on working MuJoCo recording patterns from the community.
 """
 
 import time
@@ -17,10 +17,11 @@ import numpy as np
 class VideoRecorder:
     """Records video from MuJoCo simulations using offscreen rendering.
     
-    This implementation uses a simple and reliable approach:
-    - Creates an independent mujoco.Renderer for offscreen rendering
-    - Syncs the renderer with the viewer's camera position
-    - Captures frames independently of the viewer
+    This implementation follows the proven pattern:
+    - Creates mujoco.Renderer with moderate resolution (640x480 default)
+    - Updates renderer with simulation data each frame
+    - Captures frames with simple renderer.render() call
+    - Saves using imageio/mediapy
     
     Attributes:
         viewer: MuJoCo viewer handle
@@ -41,8 +42,8 @@ class VideoRecorder:
         model,
         data,
         output_dir: str = "recordings",
-        width: int = 1920,
-        height: int = 1080,
+        width: int = 640,
+        height: int = 480,
         fps: int = 30,
     ):
         """Initialize the video recorder.
@@ -52,8 +53,8 @@ class VideoRecorder:
             model: MuJoCo model (mjModel)
             data: MuJoCo data (mjData)
             output_dir: Directory to save recordings
-            width: Video width in pixels
-            height: Video height in pixels
+            width: Video width in pixels (default 640, moderate resolution)
+            height: Video height in pixels (default 480, moderate resolution)
             fps: Frames per second for video
         """
         self.viewer = viewer
@@ -82,45 +83,22 @@ class VideoRecorder:
             self.data = data
             print("📹 VideoRecorder: Using provided model and data")
         
-        # Create offscreen renderer
-        print(f"🔧 Attempting to create mujoco.Renderer({self.width}x{self.height})...")
-        print(f"   Model type: {type(self.model)}")
-        print(f"   Has model: {self.model is not None}")
+        # Create offscreen renderer with moderate resolution
+        # Following the working pattern: mujoco.Renderer(model, height, width)
+        print(f"🔧 Creating mujoco.Renderer({self.width}x{self.height})...")
         
-        self.renderer = None
-        
-        # Try to create renderer with original dimensions
         try:
+            # Simple renderer creation - no complex parameters needed
             self.renderer = mujoco.Renderer(self.model, height=self.height, width=self.width)
-            print(f"✅ VideoRecorder initialized: {self.width}x{self.height} @ {self.fps} FPS")
+            print(f"✅ VideoRecorder initialized successfully!")
+            print(f"   Resolution: {self.width}x{self.height} @ {self.fps} FPS")
             print(f"   Output directory: {self.output_dir.absolute()}")
             print(f"   Press 'V' to start/stop recording")
         except Exception as e:
-            print(f"⚠️  Failed to create renderer with {self.width}x{self.height}: {e}")
-            
-            # Try with smaller dimensions as fallback
-            try:
-                fallback_width, fallback_height = 1280, 720
-                print(f"🔧 Trying fallback dimensions: {fallback_width}x{fallback_height}...")
-                self.renderer = mujoco.Renderer(self.model, height=fallback_height, width=fallback_width)
-                self.width = fallback_width
-                self.height = fallback_height
-                print(f"✅ VideoRecorder initialized with fallback: {self.width}x{self.height} @ {self.fps} FPS")
-                print(f"   Output directory: {self.output_dir.absolute()}")
-                print(f"   Press 'V' to start/stop recording")
-            except Exception as e2:
-                print(f"❌ Failed to create mujoco.Renderer even with fallback: {e2}")
-                print(f"   Error type: {type(e2).__name__}")
-                import traceback
-                print("   Full error traceback:")
-                traceback.print_exc()
-                self.renderer = None
-                print(f"   ⚠️  Video recording will NOT be available")
-        
-        if self.renderer is None:
-            print(f"\n⚠️  VideoRecorder: Renderer creation failed")
-            print(f"   Output directory: {self.output_dir.absolute()}")
-            print(f"   Video recording is DISABLED - press 'V' will show error message")
+            print(f"❌ Failed to create mujoco.Renderer: {e}")
+            print(f"   Error type: {type(e).__name__}")
+            self.renderer = None
+            print(f"   ⚠️  Video recording is DISABLED")
 
     def toggle_recording(self):
         """Toggle recording state (start/stop)."""
@@ -136,12 +114,7 @@ class VideoRecorder:
             # Start recording
             if self.renderer is None:
                 print("❌ Cannot start recording: Renderer not available")
-                print("   The mujoco.Renderer failed to initialize during setup.")
-                print("   Check the error messages above for details.")
-                print("   Possible causes:")
-                print("   - OpenGL/display issues")
-                print("   - MuJoCo version compatibility")
-                print("   - System graphics drivers")
+                print("   Check initialization errors above for details.")
                 return
             self.is_recording = True
             self.frames = []
@@ -155,31 +128,27 @@ class VideoRecorder:
     def capture_frame(self):
         """Capture the current frame if recording is active.
         
-        Uses the offscreen renderer to capture frames independently of the viewer.
-        Syncs the camera with the viewer's current camera position.
+        Uses the simple pattern from working examples:
+        - Update renderer with current data
+        - Call renderer.render() to get pixels
+        - Store the frame
         """
         if not self.is_recording or self.renderer is None:
             return
         
         try:
-            # Get camera from viewer
-            camera = None
-            if hasattr(self.viewer, 'cam'):
-                camera = self.viewer.cam
+            # Update renderer with current simulation data
+            # Following the working pattern: renderer.update_scene(data)
+            self.renderer.update_scene(self.data)
             
-            # Update scene with current data and camera
-            if camera is not None:
-                self.renderer.update_scene(self.data, camera=camera)
+            # Render and capture pixels - simple and direct
+            frame = self.renderer.render()
+            
+            if frame is not None and frame.size > 0:
+                self.frames.append(frame.copy())
             else:
-                self.renderer.update_scene(self.data)
-            
-            # Render and capture pixels
-            pixels = self.renderer.render()
-            
-            if pixels is not None and pixels.size > 0:
-                self.frames.append(pixels.copy())
-            else:
-                print(f"⚠️  Frame {len(self.frames)} is empty")
+                if len(self.frames) == 0:
+                    print(f"⚠️  First frame is empty")
                 
         except Exception as e:
             if len(self.frames) == 0:
