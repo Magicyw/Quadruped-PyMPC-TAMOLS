@@ -33,6 +33,13 @@ Features terrain-aware foothold adaptation:
 - easy integration: just set `scene: 'stepping_stones_medium'` in config.py
 - see [TAMOLS documentation](docs/TAMOLS_FOOTHOLD_ADAPTATION.md), [stepping stones terrain](docs/STEPPING_STONES_TERRAIN.md), and [usage guide](docs/USING_STEPPING_STONES.md) for details
 
+Features video recording:
+- press 'V' key to start/stop recording during simulation
+- captures high-quality MP4 videos at 1920x1080 @ 30 FPS
+- automatic timestamped filenames saved to `recordings/` directory
+- mouse-controlled camera viewpoint with fixed perspective during recording
+- see [video recording documentation](docs/VIDEO_RECORDING.md) for details
+
 ## Installation and Run
 
 See [here](https://github.com/iit-DLSLab/Quadruped-PyMPC/blob/main/README_install.md).

@@ -6,6 +6,7 @@ import pathlib
 import time
 from os import PathLike
 from pprint import pprint
+import threading
 
 import numpy as np
 
@@ -25,6 +26,45 @@ from quadruped_pympc.quadruped_pympc_wrapper import QuadrupedPyMPC_Wrapper
 
 # Scene loading utilities
 from simulation.scene_loader import load_scene_for_quadruped_env
+
+
+def keyboard_listener(video_recorder, stop_event):
+    """Listen for keyboard input in a separate thread.
+    
+    This function runs in a daemon thread and listens for the 'V' key to toggle
+    video recording. Uses a simple polling approach to avoid blocking Ctrl+C.
+    
+    Args:
+        video_recorder: VideoRecorder instance to control
+        stop_event: Threading event to signal when to stop listening
+    """
+    try:
+        import readchar
+        print("\n[Keyboard Listener] Press 'V' or 'v' to toggle video recording")
+        print("[Keyboard Listener] Press Ctrl+C to exit")
+        
+        while not stop_event.is_set():
+            try:
+                # Use readkey which is less blocking than readchar
+                key = readchar.readkey()
+                if key and key.lower() == 'v':
+                    video_recorder.toggle_recording()
+            except KeyboardInterrupt:
+                # Re-raise to ensure it propagates
+                raise
+            except Exception:
+                # Handle any read errors (e.g., EOF)
+                if stop_event.is_set():
+                    break
+                time.sleep(0.1)
+    except KeyboardInterrupt:
+        # Propagate the interrupt to the main thread
+        import os
+        import signal
+        os.kill(os.getpid(), signal.SIGINT)
+    except ImportError:
+        print("⚠️  readchar not available. Video recording toggle via keyboard disabled.")
+        print("   Install with: pip install readchar")
 
 
 def run_simulation(
@@ -86,6 +126,23 @@ def run_simulation(
         env.render()  # Pass in the first render call any mujoco.viewer.KeyCallbackType
         env.viewer.user_scn.flags[mujoco.mjtRndFlag.mjRND_SHADOW] = False
         env.viewer.user_scn.flags[mujoco.mjtRndFlag.mjRND_REFLECTION] = False
+        
+        # Initialize video recorder
+        from simulation.video_recorder import VideoRecorder
+        video_recorder = VideoRecorder(env.viewer, env.mjModel, env.mjData)
+        
+        # Start keyboard listener thread for video recording
+        keyboard_stop_event = threading.Event()
+        keyboard_thread = threading.Thread(
+            target=keyboard_listener,
+            args=(video_recorder, keyboard_stop_event),
+            daemon=True
+        )
+        keyboard_thread.start()
+    else:
+        video_recorder = None
+        keyboard_stop_event = None
+        keyboard_thread = None
 
     # Initialization of variables used in the main control loop --------------------------------
 
@@ -325,6 +382,11 @@ def run_simulation(
                     )
 
                 env.render()
+                
+                # Capture frame for video recording
+                if video_recorder is not None:
+                    video_recorder.capture_frame()
+                
                 last_render_time = time.time()
 
             # Reset the environment if the episode is terminated ------------------------------------------------
@@ -343,6 +405,14 @@ def run_simulation(
             ep_traj_time = np.asarray(ep_time)[:, np.newaxis]
             h5py_writer.append_trajectory(state_obs_traj=ep_obs_history, time=ep_traj_time)
 
+    # Cleanup video recorder and keyboard listener before closing environment
+    if keyboard_stop_event is not None:
+        keyboard_stop_event.set()
+    if keyboard_thread is not None and keyboard_thread.is_alive():
+        keyboard_thread.join(timeout=1.0)
+    if video_recorder is not None:
+        video_recorder.cleanup()
+    
     env.close()
     if h5py_writer is not None:
         return h5py_writer.file_path
