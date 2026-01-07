@@ -360,7 +360,8 @@ class MatLogger:
             if temp_filepath.exists():
                 try:
                     temp_filepath.unlink()
-                except:
+                except (OSError, IOError):
+                    # If cleanup fails, just continue - main error is more important
                     pass
             raise IOError(
                 f"Failed to write .mat file to {self.filepath}: {e}. "
@@ -591,12 +592,12 @@ def run_simulation(
     # Setup signal handler to ensure data is saved on Ctrl+C
     def signal_handler(signum, frame):
         """Handle Ctrl+C to ensure data is flushed before exit."""
-        print("\n\n⚠️  Ctrl+C detected. Saving data before exit...")
+        print("\n⚠️  Ctrl+C detected. Saving data before exit...")
         if mat_logger is not None:
             try:
                 mat_logger.flush()
                 print(f"✓ Data saved to {mat_filepath}")
-            except Exception as e:
+            except (OSError, IOError) as e:
                 print(f"✗ Error saving data: {e}")
         raise KeyboardInterrupt()
     
