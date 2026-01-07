@@ -7,6 +7,7 @@ The simulation now supports logging all simulation data to MATLAB-compatible `.m
 ## Features
 
 - **Complete Data Capture**: Records all state observations from `QuadrupedEnv.ALL_OBS` and all controller observations
+- **Incremental Writing**: Data is written to file after each simulation step, preventing data loss if simulation crashes
 - **Automatic Flattening**: Handles complex data structures (arrays, LegsAttr) by automatically flattening to 1D
 - **Robust Handling**: Gracefully handles None/missing values by replacing with zeros
 - **Descriptive Naming**: Creates informative filenames with robot, scene, parameters, seed, and timestamp
@@ -26,6 +27,7 @@ Each `.mat` file contains two variables:
    - N = number of columns (time + all observations)
    - First column contains `env.simulation_time` for each step
    - Remaining columns contain the flattened observation values
+   - **Updated continuously**: File is rewritten after each step, so partial data is available even if simulation is interrupted
 
 ## Usage
 
@@ -155,10 +157,12 @@ Note: `scipy` is already included in the project's `pyproject.toml` dependencies
 
 ## Performance Considerations
 
-- Data is accumulated in memory during simulation
-- File is written only once at the end of all episodes
-- For long simulations with many steps, memory usage will increase
-- Consider reducing `num_episodes` or `num_seconds_per_episode` if memory is a concern
+- Data is accumulated in memory and written to disk after each step
+- File is rewritten completely at each step to ensure data persistence
+- For very long simulations, this may cause I/O overhead
+- Memory usage grows linearly with the number of steps
+- The `write_every_n_steps` parameter in `MatLogger` can be adjusted to write less frequently (default: 1)
+  - Example: `write_every_n_steps=10` writes only every 10 steps, reducing I/O
 
 ## File Size
 
@@ -198,6 +202,8 @@ run_simulation(
 )
 ```
 
+**Note**: With incremental writing, the file is continuously updated and may cause performance impact for very long simulations due to repeated file I/O. The `write_every_n_steps` parameter can be adjusted in the MatLogger initialization if needed.
+
 ### Cannot find .mat file
 
 Check the console output for the exact path:
@@ -205,7 +211,11 @@ Check the console output for the exact path:
 MATLAB .mat logging enabled. Will save to: /path/to/log/scene_name/filename.mat
 ```
 
-The file is only written after all episodes complete successfully.
+The file is created after the first step and updated continuously throughout the simulation.
+
+### Simulation interrupted
+
+If the simulation is interrupted or crashes, the `.mat` file will contain all data up to the last completed step. This is a key advantage of incremental writing - you don't lose all data if something goes wrong.
 
 ## Example Analysis Script
 

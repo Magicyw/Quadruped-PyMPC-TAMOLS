@@ -75,24 +75,38 @@ STANDARD_LEG_ORDER = ['FL', 'FR', 'RL', 'RR']
 
 
 class MatLogger:
-    """Logger for recording simulation data and exporting to MATLAB .mat format."""
+    """Logger for recording simulation data and exporting to MATLAB .mat format.
     
-    def __init__(self, state_obs_names, quadrupedpympc_observables_names):
+    Writes data incrementally to file after each step to avoid memory buildup
+    and ensure data is not lost if simulation crashes.
+    """
+    
+    def __init__(self, state_obs_names, quadrupedpympc_observables_names, filepath, write_every_n_steps=1):
         """Initialize the MatLogger.
         
         Args:
             state_obs_names: List of state observation names from QuadrupedEnv
             quadrupedpympc_observables_names: Tuple of controller observable names
+            filepath: Path where the .mat file should be saved
+            write_every_n_steps: Write to disk every N steps (default: 1 for immediate writing)
         """
         self.state_obs_names = state_obs_names
         self.quadrupedpympc_observables_names = quadrupedpympc_observables_names
+        self.filepath = pathlib.Path(filepath)
+        self.write_every_n_steps = write_every_n_steps
         
-        # Storage for all data across all episodes
+        # Storage for data (will be written incrementally)
         self.all_data = []
         
         # Track dimensions of each observable (determined dynamically)
         self.obs_dimensions = {}
         self.header = None
+        
+        # Counter for batch writing
+        self.step_count = 0
+        
+        # Ensure directory exists
+        self.filepath.parent.mkdir(parents=True, exist_ok=True)
         
     def _flatten_value(self, value):
         """Flatten a value to 1D array, handling None, scalars, arrays, LegsAttr, etc."""
@@ -217,7 +231,7 @@ class MatLogger:
         self.header = header
     
     def record_step(self, time, state, ctrl_state):
-        """Record data from a single simulation step.
+        """Record data from a single simulation step and write to file.
         
         Args:
             time: Simulation time for this step
@@ -275,13 +289,14 @@ class MatLogger:
                 row.extend([0.0] * expected_dim)
         
         self.all_data.append(row)
-    
-    def save_to_mat(self, filepath):
-        """Save collected data to a MATLAB .mat file.
+        self.step_count += 1
         
-        Args:
-            filepath: Path where the .mat file should be saved
-        """
+        # Write to file every N steps
+        if self.step_count % self.write_every_n_steps == 0:
+            self._write_to_file()
+    
+    def _write_to_file(self):
+        """Write accumulated data to the .mat file."""
         if not SCIPY_AVAILABLE:
             raise ImportError(
                 "scipy is required for .mat file export but is not installed. "
@@ -289,7 +304,6 @@ class MatLogger:
             )
         
         if not self.all_data:
-            print("⚠️  No data to save")
             return
         
         # Convert to numpy array
@@ -309,13 +323,16 @@ class MatLogger:
             'data': data
         }
         
-        # Ensure directory exists
-        filepath = pathlib.Path(filepath)
-        filepath.parent.mkdir(parents=True, exist_ok=True)
-        
         # Save to .mat file
-        savemat(filepath, mat_dict)
-        print(f"✓ Saved {len(self.all_data)} steps to {filepath}")
+        savemat(self.filepath, mat_dict)
+    
+    def flush(self):
+        """Ensure all data is written to file."""
+        if self.all_data and self.step_count % self.write_every_n_steps != 0:
+            self._write_to_file()
+        if self.all_data:
+            print(f"✓ Saved {len(self.all_data)} steps to {self.filepath}")
+
 
 
 def _format_param_for_filename(param):
@@ -495,17 +512,13 @@ def run_simulation(
         h5py_writer = None
     
     # MATLAB .mat file logging ---------------------------------------------------------------------------------
+    mat_filepath = None  # Initialize to None
     if mat_logging:
         if not SCIPY_AVAILABLE:
             print("⚠️  scipy is not installed. MATLAB .mat logging disabled.")
             print("   Install scipy with: pip install scipy")
             mat_logger = None
         else:
-            mat_logger = MatLogger(
-                state_obs_names=state_obs_names,
-                quadrupedpympc_observables_names=quadrupedpympc_observables_names
-            )
-            
             # Create log directory and filename
             log_root = pathlib.Path("log") / scene_name
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -522,6 +535,13 @@ def run_simulation(
                 f"seed{seed}_{timestamp}.mat"
             )
             mat_filepath = log_root / mat_filename
+            
+            mat_logger = MatLogger(
+                state_obs_names=state_obs_names,
+                quadrupedpympc_observables_names=quadrupedpympc_observables_names,
+                filepath=mat_filepath,
+                write_every_n_steps=1  # Write after each step
+            )
             print(f"\n MATLAB .mat logging enabled. Will save to: {mat_filepath.absolute()}")
     else:
         mat_logger = None
@@ -715,9 +735,9 @@ def run_simulation(
     if video_recorder is not None:
         video_recorder.cleanup()
     
-    # Save MATLAB .mat file if logging is enabled
+    # Flush MATLAB .mat file if logging is enabled
     if mat_logger is not None:
-        mat_logger.save_to_mat(mat_filepath)
+        mat_logger.flush()
 
     env.close()
     if h5py_writer is not None:
