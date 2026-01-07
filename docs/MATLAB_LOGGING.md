@@ -7,7 +7,9 @@ The simulation now supports logging all simulation data to MATLAB-compatible `.m
 ## Features
 
 - **Complete Data Capture**: Records all state observations from `QuadrupedEnv.ALL_OBS` and all controller observations
-- **Incremental Writing**: Data is written to file after each simulation step, preventing data loss if simulation crashes
+- **Batch Writing**: Data is written to file every 50 steps by default for optimal performance
+- **Atomic Writes**: Uses temp file + rename to prevent data corruption if interrupted
+- **Ctrl+C Protection**: Signal handler ensures data is saved before exit when interrupted
 - **Automatic Flattening**: Handles complex data structures (arrays, LegsAttr) by automatically flattening to 1D
 - **Robust Handling**: Gracefully handles None/missing values by replacing with zeros
 - **Descriptive Naming**: Creates informative filenames with robot, scene, parameters, seed, and timestamp
@@ -27,7 +29,7 @@ Each `.mat` file contains two variables:
    - N = number of columns (time + all observations)
    - First column contains `env.simulation_time` for each step
    - Remaining columns contain the flattened observation values
-   - **Updated continuously**: File is rewritten after each step, so partial data is available even if simulation is interrupted
+   - **Updated in batches**: File is rewritten every 50 steps (configurable), so partial data is available even if simulation is interrupted
 
 ## Usage
 
@@ -157,15 +159,16 @@ Note: `scipy` is already included in the project's `pyproject.toml` dependencies
 
 ## Performance Considerations
 
-- Data is accumulated in memory and written to disk after each step
-- File is rewritten completely at each step to ensure data persistence
-- **Important**: For very long simulations, frequent file rewrites may cause significant I/O overhead
+- Data is accumulated in memory and written to disk every 50 steps by default
+- File is rewritten completely at each write using atomic operations (temp file + rename)
+- **Default setting (50 steps)**: Balances performance and data safety
 - Memory usage grows linearly with the number of steps
-- **Recommendation**: For performance-critical or long-running simulations (>10000 steps), consider increasing `write_every_n_steps`
-  - The `write_every_n_steps` parameter in `MatLogger` controls write frequency (default: 1)
-  - Example: `write_every_n_steps=10` writes only every 10 steps, reducing I/O by 90%
-  - Example: `write_every_n_steps=100` for very long simulations (>100000 steps)
+- **Customization**: The `write_every_n_steps` parameter can be adjusted in the MatLogger initialization
+  - Default: `write_every_n_steps=50` (good balance for most use cases)
+  - Example: `write_every_n_steps=100` for even better performance on very long simulations
+  - Example: `write_every_n_steps=10` for more frequent saves if crashes are common
   - Trade-off: Higher values = better performance but more data loss risk if simulation crashes
+- **Ctrl+C handling**: Signal handler ensures data is always flushed before exit, even with batch writing
 
 ## File Size
 
@@ -205,8 +208,6 @@ run_simulation(
 )
 ```
 
-**Note**: With incremental writing, the file is continuously updated and may cause performance impact for very long simulations due to repeated file I/O. The `write_every_n_steps` parameter can be adjusted in the MatLogger initialization if needed.
-
 ### Cannot find .mat file
 
 Check the console output for the exact path:
@@ -214,11 +215,24 @@ Check the console output for the exact path:
 MATLAB .mat logging enabled. Will save to: /path/to/log/scene_name/filename.mat
 ```
 
-The file is created after the first step and updated continuously throughout the simulation.
+The file is created after the first batch write (50 steps by default) and updated every 50 steps throughout the simulation.
 
-### Simulation interrupted
+### Simulation interrupted with Ctrl+C
 
-If the simulation is interrupted or crashes, the `.mat` file will contain all data up to the last completed step. This is a key advantage of incremental writing - you don't lose all data if something goes wrong.
+When you press Ctrl+C, a signal handler will catch the interrupt and:
+1. Display a message: "⚠️  Ctrl+C detected. Saving data before exit..."
+2. Flush all accumulated data to the .mat file
+3. Display confirmation: "✓ Data saved to /path/to/file.mat"
+4. Then exit the simulation
+
+This ensures no data loss even when manually interrupting the simulation. The file will contain all data up to the last completed step.
+
+### Data corruption or empty file
+
+If you experience data corruption (empty file after Ctrl+C), this is now fixed with:
+- **Atomic writes**: Data is written to a temporary file first, then atomically renamed
+- **Signal handling**: Ctrl+C properly flushes data before exit
+- **Batch writing**: Reduces the chance of interruption during write operations
 
 ## Example Analysis Script
 

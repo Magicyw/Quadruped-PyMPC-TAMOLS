@@ -1,5 +1,6 @@
 # Description: This script is used to simulate the full model of the robot in mujoco
 import pathlib
+import signal
 import threading
 
 # Authors:
@@ -306,6 +307,9 @@ class MatLogger:
     def _write_to_file(self):
         """Write accumulated data to the .mat file.
         
+        Uses atomic write (write to temp file, then rename) to prevent
+        data corruption if interrupted.
+        
         Raises:
             IOError: If file write fails due to disk full, permissions, etc.
         """
@@ -336,10 +340,28 @@ class MatLogger:
             'data': data
         }
         
-        # Save to .mat file with error handling
+        # Use atomic write: write to temp file, then rename
+        # This prevents corruption if interrupted during write
+        temp_filepath = self.filepath.with_suffix('.mat.tmp')
+        
         try:
-            savemat(self.filepath, mat_dict)
+            # Write to temporary file first
+            savemat(temp_filepath, mat_dict)
+            
+            # Atomic rename to actual file
+            # On Unix, this is atomic even if file exists
+            # On Windows, need to remove first if exists
+            if self.filepath.exists():
+                self.filepath.unlink()
+            temp_filepath.rename(self.filepath)
+            
         except (OSError, IOError) as e:
+            # Clean up temp file if write failed
+            if temp_filepath.exists():
+                try:
+                    temp_filepath.unlink()
+                except:
+                    pass
             raise IOError(
                 f"Failed to write .mat file to {self.filepath}: {e}. "
                 "Check disk space and file permissions."
@@ -559,11 +581,27 @@ def run_simulation(
                 state_obs_names=state_obs_names,
                 quadrupedpympc_observables_names=quadrupedpympc_observables_names,
                 filepath=mat_filepath,
-                write_every_n_steps=1  # Write after each step
+                write_every_n_steps=50  # Write every 50 steps for better performance
             )
             print(f"\n MATLAB .mat logging enabled. Will save to: {mat_filepath.absolute()}")
+            print(f"   Writing to file every 50 steps for performance")
     else:
         mat_logger = None
+
+    # Setup signal handler to ensure data is saved on Ctrl+C
+    def signal_handler(signum, frame):
+        """Handle Ctrl+C to ensure data is flushed before exit."""
+        print("\n\n⚠️  Ctrl+C detected. Saving data before exit...")
+        if mat_logger is not None:
+            try:
+                mat_logger.flush()
+                print(f"✓ Data saved to {mat_filepath}")
+            except Exception as e:
+                print(f"✗ Error saving data: {e}")
+        raise KeyboardInterrupt()
+    
+    # Register signal handler
+    original_sigint_handler = signal.signal(signal.SIGINT, signal_handler)
 
     # -----------------------------------------------------------------------------------------------------------
     RENDER_FREQ = 30  # Hz
@@ -757,6 +795,9 @@ def run_simulation(
     # Flush MATLAB .mat file if logging is enabled
     if mat_logger is not None:
         mat_logger.flush()
+    
+    # Restore original signal handler
+    signal.signal(signal.SIGINT, original_sigint_handler)
 
     env.close()
     if h5py_writer is not None:
