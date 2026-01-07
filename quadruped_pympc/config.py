@@ -2,7 +2,6 @@
 and of the internal simulations that can be launch from the folder /simulation.
 """
 import numpy as np
-
 from quadruped_pympc.helpers.quadruped_utils import GaitType
 
 # These are used both for a real experiment and a simulation -----------
@@ -10,7 +9,6 @@ from quadruped_pympc.helpers.quadruped_utils import GaitType
 robot = 'aliengo'  # 'aliengo', 'go1', 'go2', 'b2', 'hyqreal1', 'hyqreal2', 'mini_cheetah', 'spot'  # TODO: Load from robot_descriptions.py
 
 from gym_quadruped.robot_cfgs import RobotConfig, get_robot_config
-
 robot_cfg: RobotConfig = get_robot_config(robot_name=robot)
 robot_leg_joints = robot_cfg.leg_joints
 robot_feet_geom_names = robot_cfg.feet_geom_names
@@ -48,13 +46,13 @@ elif (robot == 'hyqreal1'):
     inertia = np.array([[4.55031444e+00, 2.75249434e-03, -5.11957307e-01],
                         [2.75249434e-03, 2.02411774e+01, -7.38560592e-04],
                         [-5.11957307e-01, -7.38560592e-04, 2.14269772e+01]])
-
+    
 elif (robot == 'hyqreal2'):
     mass = 126.69
     inertia = np.array([[4.55031444e+00, 2.75249434e-03, -5.11957307e-01],
                         [2.75249434e-03, 2.02411774e+01, -7.38560592e-04],
                         [-5.11957307e-01, -7.38560592e-04, 2.14269772e+01]])
-
+    
 elif (robot == 'mini_cheetah'):
     mass = 12.5
     inertia = np.array([[1.58460467e-01, 1.21660000e-04, -1.55444692e-02],
@@ -116,7 +114,7 @@ mpc_params = {
 
     # if this is off, the mpc will not optimize the footholds and will
     # use only the ones provided in the reference
-    'use_foothold_optimization':               True,
+    'use_foothold_optimization':               False,
 
     # this is set to false automatically is use_foothold_optimization is false
     # because in that case we cannot chose the footholds and foothold
@@ -194,56 +192,51 @@ mpc_params = {
 # -----------------------------------------------------------------------
 
 simulation_params = {
-    'swing_generator':             'scipy',  # 'scipy', 'explicit', 'bezier_ref'
+    # bezier_ref的效果最好
+    'swing_generator':             'bezier_ref',  # 'scipy', 'explicit', 'bezier_ref'
     'swing_position_gain_fb':      500,
     'swing_velocity_gain_fb':      10,
     'impedence_joint_position_gain':  10.0,
     'impedence_joint_velocity_gain':  2.0,
 
-    'step_height':                 0.2 * hip_height,  
+    'step_height':                 0.3 * hip_height,  
 
     # Visual Foothold adapatation
-    "visual_foothold_adaptation":  'blind', #'blind', 'height', 'vfa', 'tamols'
+    "visual_foothold_adaptation":  'tamols', #'blind', 'height', 'vfa', 'tamols'
 
     # TAMOLS-inspired foothold adaptation parameters
     # These parameters are used when visual_foothold_adaptation is set to 'tamols'
     'tamols_params': {
         # Candidate generation parameters
-        'search_radius': 0.35,           # [m] radius around seed foothold to search
+        'search_radius': 0.32,           # [m] radius around seed foothold to search
         'search_resolution': 0.04,       # [m] grid step size for candidate sampling
         'patch_size': 3,                 # number of neighboring heightmap points to sample for gradient estimation
-        'gradient_delta': 0.04,          # [m] offset for finite difference gradient estimation = search_resolution
-        
-        # Optional: Use heightmap data directly for candidate generation
-        'use_heightmap_sampling': False,  # If true, sample candidates from heightmap data
-        'heightmap_window_size': 5,       # Window size for heightmap sampling (rows/cols around center)
-        
         # Cost function weights (higher = more penalty)
-        # Aligned with TAMOLS reference implementation (ianpedroza/tamols-rl)
-        'weight_edge_avoidance': 15.0,         # from tamols/costs.py:add_edge_avoidance_cost
-        'weight_roughness': 10.0,              # terrain roughness/irregularity  
-        'weight_previous_solution': 2,     # from tamols/costs.py:add_previous_solution_cost (deviation from seed)
-        'weight_kinematic': 10.0,             # from tamols/constraints.py:add_kinematic_constraints
-        'weight_nominal_kinematic': 1.0,     # from tamols/costs.py:add_nominal_kinematic_cost (GIA: maintains hip height)
-        'weight_reference_tracking': 5.0,     # from tamols/costs.py:add_tracking_cost (GIA: tracks velocity, prevents standing still)
-        
+        'gradient_delta': 0.04,          # [m] offset for finite difference gradient estimation = search_resolution
+
+        'weight_edge_avoidance': 10.0,    # penalize high gradient/slope (edge risk)
+        'weight_roughness': 10,         # penalize terrain roughness/irregularity
+        'weight_deviation': 2,            # penalize deviation from seed foothold
+        'weight_kinematic': 2.0,         # penalize candidates outside kinematic reach
+        'weight_nominal_kinematic': 0.,    # encourage nominal kinematic positions
+        'weight_reference_tracking': 10.0, # encourage tracking of velocity, prevents standing still       
+
         # Stability parameters (Scheme 2: stability-coupled foothold adaptation)
-        'weight_stability': 10.0,        # Weight for stability cost (CoM-to-support distance penalty)
+        'weight_stability': 20.0,        # Weight for stability cost (CoM-to-support distance penalty)
         'stability_margin': 0.06,        # [m] minimum safe distance from CoM to diagonal support line
         'stability_hard': False,         # If true, reject candidates violating stability_margin (hard constraint)
         'stability_soft': True,          # If true, apply soft penalty for candidates close to stability_margin
         'estimated_swing_time': 0.25,    # [s] estimated time until foothold contact (for CoM prediction)
-
         # Nominal kinematic parameters
-        'h_des': hip_height,                        # [m] desired hip height for nominal kinematics (go1/go2: 0.25, aliengo: 0.30)
-
+        'h_des': hip_height, # [m] desired hip height for nominal kinematics (go1/go2: 0.25, aliengo: 0.30)
         # Kinematic reachability constraints (robot-specific, in meters)
         # Distance from hip to foothold must be in [l_min, l_max]
-        'l_min': {'go1': 0.15, 'go2': 0.15, 'aliengo': 0.18, 'b2': 0.25, 
+        'l_min': {'go1': 0.15, 'go2': 0.15, 'aliengo': 0.1, 'b2': 0.25, 
                   'hyqreal1': 0.25, 'hyqreal2': 0.25, 'mini_cheetah': 0.12, 'spot': 0.20},
         'l_max': {'go1': 0.45, 'go2': 0.45, 'aliengo': 0.55, 'b2': 0.75, 
                   'hyqreal1': 0.75, 'hyqreal2': 0.75, 'mini_cheetah': 0.40, 'spot': 0.60},
 
+        'slope_threshold': 0.7,         # [rad] maximum allowable terrain slope for candidate foothold (approx 30 degrees)
         # Foothold constraint box size (for MPC foothold constraints)
         'constraint_box_dx': 0.05,       # [m] +/- x constraint around chosen foothold
         'constraint_box_dy': 0.05,       # [m] +/- y constraint around chosen foothold
@@ -279,30 +272,11 @@ simulation_params = {
     'use_inertia_recomputation':   True,
 
     # Scene configuration
-    # Built-in scenes: 'flat', 'random_boxes', 'random_pyramids', 'perlin'
-    # Stepping stones scenes: 'stepping_stones_easy', 'stepping_stones_medium', 
-    #                         'stepping_stones_hard', 'stepping_stones_sparse', 
-    #                         'stepping_stones' (default)
+    # Built-in scenes: 'flat', 'random_boxes', 'perlin', 'ramp', 'slippery', 'stairs','complex_terrain'
+    # 'stepping_stones' 'discrete_terrain' 
+    # 'balance_beams' 'stepping_stones_height' 'stepping_beams' 'random_pyramids' 'stairs'
     # Custom scene: provide full path to XML file (e.g., '/path/to/custom_scene.xml')
-    'scene':                       'flat',
-
-    # Stepping stones terrain configuration (used when scene is a stepping_stones variant)
-    # Set to None to use pre-generated XML files, or customize parameters here
-    'stepping_stones_params':      None,  # Can be a dict with custom parameters
-    # Example custom parameters:
-    # 'stepping_stones_params': {
-    #     'uphill_length': 3.0,
-    #     'uphill_angle': 15.0,
-    #     'flat1_length': 1.0,
-    #     'stepping_stones_length': 4.0,
-    #     'stone_radius': 0.15,
-    #     'stone_height': 0.05,
-    #     'stone_spacing': 0.4,
-    #     'stones_per_row': 3,
-    #     'flat2_length': 1.0,
-    #     'downhill_length': 3.0,
-    #     'downhill_angle': 15.0,
-    # }
+    'scene':                       'stairs',
 
     }
 # -----------------------------------------------------------------------
