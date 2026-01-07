@@ -1,13 +1,11 @@
 # Description: This script is used to simulate the full model of the robot in mujoco
 import pathlib
-
 # Authors:
 # Giulio Turrisi, Daniel Ordonez
 import time
 from os import PathLike
 from pprint import pprint
 import threading
-
 import numpy as np
 
 import mujoco
@@ -24,10 +22,6 @@ from quadruped_pympc.helpers.quadruped_utils import plot_swing_mujoco
 # PyMPC controller imports
 from quadruped_pympc.quadruped_pympc_wrapper import QuadrupedPyMPC_Wrapper
 
-# Scene loading utilities
-from simulation.scene_loader import load_scene_for_quadruped_env
-
-
 def keyboard_listener(video_recorder, stop_event):
     """Listen for keyboard input in a separate thread.
     
@@ -42,7 +36,7 @@ def keyboard_listener(video_recorder, stop_event):
         import readchar
         print("\n[Keyboard Listener] Press 'V' or 'v' to toggle video recording")
         print("[Keyboard Listener] Press Ctrl+C to exit")
-        
+
         while not stop_event.is_set():
             try:
                 # Use readkey which is less blocking than readchar
@@ -71,7 +65,7 @@ def run_simulation(
     qpympc_cfg,
     process=0,
     num_episodes=500,
-    num_seconds_per_episode=60,
+    num_seconds_per_episode=600,
     ref_base_lin_vel=(0.0, 4.0),
     ref_base_ang_vel=(-0.4, 0.4),
     friction_coeff=(0.5, 1.0),
@@ -89,16 +83,16 @@ def run_simulation(
     robot_feet_geom_names = qpympc_cfg.robot_feet_geom_names
     scene_name = qpympc_cfg.simulation_params["scene"]
     simulation_dt = qpympc_cfg.simulation_params["dt"]
-
-    # Load scene configuration (handles stepping stones and custom terrains)
-    stepping_stones_params = qpympc_cfg.simulation_params.get("stepping_stones_params", None)
-    scene_arg, custom_scene_path = load_scene_for_quadruped_env(scene_name, stepping_stones_params)
     
-    if custom_scene_path:
-        print(f"Loading custom scene from: {custom_scene_path}")
+    # # Load scene configuration (handles stepping stones and custom terrains)
+    # stepping_stones_params = qpympc_cfg.simulation_params.get("stepping_stones_params", None)
+    # scene_arg, custom_scene_path = load_scene_for_quadruped_env(scene_name, stepping_stones_params)
+
+    # if custom_scene_path:
+    #     print(f"Loading custom scene from: {custom_scene_path}")
 
     # Save all observables available.
-    state_obs_names = [] #list(QuadrupedEnv.ALL_OBS)  # + list(IMU.ALL_OBS)
+    state_obs_names = []#list(QuadrupedEnv.ALL_OBS)  # + list(IMU.ALL_OBS)
 
     # Create the quadruped robot environment -----------------------------------------------------------
     # Note: gym_quadruped may need the scene parameter to be a path for custom scenes
@@ -106,7 +100,7 @@ def run_simulation(
     # or copy the XML to gym_quadruped's scene directory
     env = QuadrupedEnv(
         robot=robot_name,
-        scene=scene_arg,  # This will be either a built-in name or a path
+        scene=scene_name,  # This will be either a built-in name or a path
         sim_dt=simulation_dt,
         ref_base_lin_vel=np.asarray(ref_base_lin_vel) * hip_height,  # pass a float for a fixed value
         ref_base_ang_vel=ref_base_ang_vel,  # pass a float for a fixed value
@@ -126,11 +120,11 @@ def run_simulation(
         env.render()  # Pass in the first render call any mujoco.viewer.KeyCallbackType
         env.viewer.user_scn.flags[mujoco.mjtRndFlag.mjRND_SHADOW] = False
         env.viewer.user_scn.flags[mujoco.mjtRndFlag.mjRND_REFLECTION] = False
-        
+
         # Initialize video recorder
-        from simulation.video_recorder import VideoRecorder
+        from video_recorder import VideoRecorder
         video_recorder = VideoRecorder(env.viewer, env.mjModel, env.mjData)
-        
+
         # Start keyboard listener thread for video recording
         keyboard_stop_event = threading.Event()
         keyboard_thread = threading.Thread(
@@ -143,7 +137,6 @@ def run_simulation(
         video_recorder = None
         keyboard_stop_event = None
         keyboard_thread = None
-
     # Initialization of variables used in the main control loop --------------------------------
 
     # Torque vector
@@ -166,7 +159,7 @@ def run_simulation(
         from gym_quadruped.sensors.heightmap import HeightMap
 
         resolution_heightmap = 0.04
-        num_rows_heightmap = 7
+        num_rows_heightmap = 13
         num_cols_heightmap = 7
         heightmaps = LegsAttr(
             FL=HeightMap(num_rows=num_rows_heightmap, num_cols=num_cols_heightmap, 
@@ -350,6 +343,8 @@ def run_simulation(
                     ref_feet_pos=ctrl_state["ref_feet_pos"],
                     early_stance_detector=quadrupedpympc_wrapper.wb_interface.esd,
                     geom_ids=feet_traj_geom_ids,
+                    nominal_feet_pos=quadrupedpympc_wrapper.wb_interface.nominal_feet_pos,
+                    adapted_feet_pos=quadrupedpympc_wrapper.wb_interface.adapted_feet_pos,
                 )
 
                 # Update and Plot the heightmap
@@ -380,13 +375,11 @@ def run_simulation(
                         color=np.array([0, 1, 0, 0.5]),
                         geom_id=feet_GRF_geom_ids[leg_name],
                     )
-
+                # Render frame
                 env.render()
-                
                 # Capture frame for video recording
                 if video_recorder is not None:
                     video_recorder.capture_frame()
-                
                 last_render_time = time.time()
 
             # Reset the environment if the episode is terminated ------------------------------------------------
@@ -412,7 +405,7 @@ def run_simulation(
         keyboard_thread.join(timeout=1.0)
     if video_recorder is not None:
         video_recorder.cleanup()
-    
+
     env.close()
     if h5py_writer is not None:
         return h5py_writer.file_path
