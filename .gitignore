@@ -316,6 +316,10 @@ quadruped_pympc/controllers/gradient/nominal/c_generated_code_gait_adaptive/
 *.pkl
 *.h5
 
+# MATLAB .mat files from simulation logging
+/log/
+*.mat
+
 
 # ROS2
 ros2/msgs_ws/build/

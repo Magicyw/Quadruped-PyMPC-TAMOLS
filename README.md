@@ -40,6 +40,13 @@ Features video recording:
 - mouse-controlled camera viewpoint with fixed perspective during recording
 - see [video recording documentation](docs/VIDEO_RECORDING.md) for details
 
+Features MATLAB .mat file logging:
+- automatically records all simulation data to MATLAB-compatible .mat files
+- captures state observations from environment and controller
+- saves to `log/<scene_name>/` with descriptive filenames
+- easy data analysis in MATLAB or Python with scipy
+- see [MATLAB logging documentation](docs/MATLAB_LOGGING.md) for details
+
 ## Installation and Run
 
 See [here](https://github.com/iit-DLSLab/Quadruped-PyMPC/blob/main/README_install.md).
