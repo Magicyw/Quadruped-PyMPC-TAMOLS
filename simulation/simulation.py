@@ -70,6 +70,10 @@ def keyboard_listener(video_recorder, stop_event):
         print("   Install with: pip install readchar")
 
 
+# Standard leg order used throughout simulation
+STANDARD_LEG_ORDER = ['FL', 'FR', 'RL', 'RR']
+
+
 class MatLogger:
     """Logger for recording simulation data and exporting to MATLAB .mat format."""
     
@@ -97,9 +101,9 @@ class MatLogger:
         elif isinstance(value, (int, float, np.integer, np.floating)):
             return np.array([value], dtype=np.float64)
         elif isinstance(value, LegsAttr):
-            # Flatten LegsAttr by concatenating all leg values
+            # Flatten LegsAttr by concatenating all leg values in standard order
             flattened = []
-            for leg_name in ['FL', 'FR', 'RL', 'RR']:
+            for leg_name in STANDARD_LEG_ORDER:
                 leg_val = getattr(value, leg_name, None)
                 if leg_val is not None:
                     leg_flat = np.atleast_1d(leg_val).flatten()
@@ -291,16 +295,13 @@ class MatLogger:
         # Convert to numpy array
         data = np.array(self.all_data, dtype=np.float64)
         
-        # Ensure header and data columns match
+        # Ensure header and data columns match - this should never happen if logic is correct
         if self.header is not None and data.shape[1] != len(self.header):
-            print(f"⚠️  Warning: Header length ({len(self.header)}) doesn't match data columns ({data.shape[1]})")
-            # Adjust header or data as needed
-            if data.shape[1] < len(self.header):
-                self.header = self.header[:data.shape[1]]
-            else:
-                # Pad header
-                for i in range(len(self.header), data.shape[1]):
-                    self.header.append(f"unknown_{i}")
+            error_msg = (
+                f"Data dimension mismatch: Header has {len(self.header)} columns "
+                f"but data has {data.shape[1]} columns. This indicates a bug in data collection."
+            )
+            raise ValueError(error_msg)
         
         # Create the .mat structure
         mat_dict = {
@@ -315,6 +316,21 @@ class MatLogger:
         # Save to .mat file
         savemat(filepath, mat_dict)
         print(f"✓ Saved {len(self.all_data)} steps to {filepath}")
+
+
+def _format_param_for_filename(param):
+    """Format a parameter (scalar or range) as a string for filename.
+    
+    Args:
+        param: Either a scalar value or a tuple/list of (min, max)
+    
+    Returns:
+        Formatted string like "1.0" or "0.5-1.0"
+    """
+    if isinstance(param, (tuple, list)):
+        return f"{param[0]:.1f}-{param[1]:.1f}"
+    else:
+        return f"{param:.1f}"
 
 
 def run_simulation(
@@ -494,21 +510,10 @@ def run_simulation(
             log_root = pathlib.Path("log") / scene_name
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             
-            # Format velocity and friction for filename
-            if isinstance(ref_base_lin_vel, (tuple, list)):
-                lin_vel_str = f"{ref_base_lin_vel[0]:.1f}-{ref_base_lin_vel[1]:.1f}"
-            else:
-                lin_vel_str = f"{ref_base_lin_vel:.1f}"
-            
-            if isinstance(ref_base_ang_vel, (tuple, list)):
-                ang_vel_str = f"{ref_base_ang_vel[0]:.1f}-{ref_base_ang_vel[1]:.1f}"
-            else:
-                ang_vel_str = f"{ref_base_ang_vel:.1f}"
-            
-            if isinstance(friction_coeff, (tuple, list)):
-                friction_str = f"{friction_coeff[0]:.1f}-{friction_coeff[1]:.1f}"
-            else:
-                friction_str = f"{friction_coeff:.1f}"
+            # Format velocity and friction for filename using helper function
+            lin_vel_str = _format_param_for_filename(ref_base_lin_vel)
+            ang_vel_str = _format_param_for_filename(ref_base_ang_vel)
+            friction_str = _format_param_for_filename(friction_coeff)
             
             mat_filename = (
                 f"{robot_name}_{scene_name}_"
