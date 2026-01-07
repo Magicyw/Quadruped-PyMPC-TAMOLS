@@ -159,10 +159,13 @@ Note: `scipy` is already included in the project's `pyproject.toml` dependencies
 
 - Data is accumulated in memory and written to disk after each step
 - File is rewritten completely at each step to ensure data persistence
-- For very long simulations, this may cause I/O overhead
+- **Important**: For very long simulations, frequent file rewrites may cause significant I/O overhead
 - Memory usage grows linearly with the number of steps
-- The `write_every_n_steps` parameter in `MatLogger` can be adjusted to write less frequently (default: 1)
-  - Example: `write_every_n_steps=10` writes only every 10 steps, reducing I/O
+- **Recommendation**: For performance-critical or long-running simulations (>10000 steps), consider increasing `write_every_n_steps`
+  - The `write_every_n_steps` parameter in `MatLogger` controls write frequency (default: 1)
+  - Example: `write_every_n_steps=10` writes only every 10 steps, reducing I/O by 90%
+  - Example: `write_every_n_steps=100` for very long simulations (>100000 steps)
+  - Trade-off: Higher values = better performance but more data loss risk if simulation crashes
 
 ## File Size
 

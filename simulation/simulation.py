@@ -89,7 +89,15 @@ class MatLogger:
             quadrupedpympc_observables_names: Tuple of controller observable names
             filepath: Path where the .mat file should be saved
             write_every_n_steps: Write to disk every N steps (default: 1 for immediate writing)
+        
+        Raises:
+            ValueError: If filepath is None or write_every_n_steps is not positive
         """
+        if filepath is None:
+            raise ValueError("filepath cannot be None")
+        if not isinstance(write_every_n_steps, int) or write_every_n_steps <= 0:
+            raise ValueError(f"write_every_n_steps must be a positive integer, got {write_every_n_steps}")
+        
         self.state_obs_names = state_obs_names
         self.quadrupedpympc_observables_names = quadrupedpympc_observables_names
         self.filepath = pathlib.Path(filepath)
@@ -296,7 +304,11 @@ class MatLogger:
             self._write_to_file()
     
     def _write_to_file(self):
-        """Write accumulated data to the .mat file."""
+        """Write accumulated data to the .mat file.
+        
+        Raises:
+            IOError: If file write fails due to disk full, permissions, etc.
+        """
         if not SCIPY_AVAILABLE:
             raise ImportError(
                 "scipy is required for .mat file export but is not installed. "
@@ -304,6 +316,7 @@ class MatLogger:
             )
         
         if not self.all_data:
+            # No data to write yet - this is normal on first call before any steps
             return
         
         # Convert to numpy array
@@ -323,8 +336,14 @@ class MatLogger:
             'data': data
         }
         
-        # Save to .mat file
-        savemat(self.filepath, mat_dict)
+        # Save to .mat file with error handling
+        try:
+            savemat(self.filepath, mat_dict)
+        except (OSError, IOError) as e:
+            raise IOError(
+                f"Failed to write .mat file to {self.filepath}: {e}. "
+                "Check disk space and file permissions."
+            ) from e
     
     def flush(self):
         """Ensure all data is written to file."""
