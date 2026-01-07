@@ -1,14 +1,16 @@
 # Description: This script is used to simulate the full model of the robot in mujoco
 import pathlib
+import threading
+
 # Authors:
 # Giulio Turrisi, Daniel Ordonez
 import time
+from datetime import datetime
 from os import PathLike
 from pprint import pprint
-import threading
-import numpy as np
 
 import mujoco
+import numpy as np
 
 # Gym and Simulation related imports
 from gym_quadruped.quadruped_env import QuadrupedEnv
@@ -21,6 +23,13 @@ from quadruped_pympc.helpers.quadruped_utils import plot_swing_mujoco
 
 # PyMPC controller imports
 from quadruped_pympc.quadruped_pympc_wrapper import QuadrupedPyMPC_Wrapper
+
+# Import for MATLAB file export
+try:
+    from scipy.io import savemat
+    SCIPY_AVAILABLE = True
+except ImportError:
+    SCIPY_AVAILABLE = False
 
 def keyboard_listener(video_recorder, stop_event):
     """Listen for keyboard input in a separate thread.
@@ -61,6 +70,253 @@ def keyboard_listener(video_recorder, stop_event):
         print("   Install with: pip install readchar")
 
 
+class MatLogger:
+    """Logger for recording simulation data and exporting to MATLAB .mat format."""
+    
+    def __init__(self, state_obs_names, quadrupedpympc_observables_names):
+        """Initialize the MatLogger.
+        
+        Args:
+            state_obs_names: List of state observation names from QuadrupedEnv
+            quadrupedpympc_observables_names: Tuple of controller observable names
+        """
+        self.state_obs_names = state_obs_names
+        self.quadrupedpympc_observables_names = quadrupedpympc_observables_names
+        
+        # Storage for all data across all episodes
+        self.all_data = []
+        
+        # Track dimensions of each observable (determined dynamically)
+        self.obs_dimensions = {}
+        self.header = None
+        
+    def _flatten_value(self, value):
+        """Flatten a value to 1D array, handling None, scalars, arrays, LegsAttr, etc."""
+        if value is None:
+            return None
+        elif isinstance(value, (int, float, np.integer, np.floating)):
+            return np.array([value], dtype=np.float64)
+        elif isinstance(value, LegsAttr):
+            # Flatten LegsAttr by concatenating all leg values
+            flattened = []
+            for leg_name in ['FL', 'FR', 'RL', 'RR']:
+                leg_val = getattr(value, leg_name, None)
+                if leg_val is not None:
+                    leg_flat = np.atleast_1d(leg_val).flatten()
+                    flattened.append(leg_flat)
+            if flattened:
+                return np.concatenate(flattened).astype(np.float64)
+            else:
+                return None
+        elif isinstance(value, np.ndarray):
+            return value.flatten().astype(np.float64)
+        elif isinstance(value, (list, tuple)):
+            return np.array(value, dtype=np.float64).flatten()
+        else:
+            # Try to convert to array
+            try:
+                return np.array(value, dtype=np.float64).flatten()
+            except (TypeError, ValueError):
+                return None
+    
+    def _build_header(self, time, state, ctrl_state):
+        """Build the header by inferring dimensions from actual data."""
+        header = ['time']
+        
+        # Build header from state observations
+        for obs_name in self.state_obs_names:
+            value = state.get(obs_name, None)
+            flat_value = self._flatten_value(value)
+            
+            if flat_value is not None and len(flat_value) > 0:
+                dim = len(flat_value)
+                self.obs_dimensions[obs_name] = dim
+                
+                if dim == 1:
+                    header.append(obs_name)
+                else:
+                    for i in range(dim):
+                        header.append(f"{obs_name}_{i}")
+            else:
+                # If None or empty, we'll need to wait for a valid value
+                self.obs_dimensions[obs_name] = None
+        
+        # Build header from controller observations
+        for obs_name in self.quadrupedpympc_observables_names:
+            value = ctrl_state.get(obs_name, None)
+            flat_value = self._flatten_value(value)
+            
+            if flat_value is not None and len(flat_value) > 0:
+                dim = len(flat_value)
+                self.obs_dimensions[obs_name] = dim
+                
+                if dim == 1:
+                    header.append(obs_name)
+                else:
+                    for i in range(dim):
+                        header.append(f"{obs_name}_{i}")
+            else:
+                # If None or empty, we'll need to wait for a valid value
+                self.obs_dimensions[obs_name] = None
+        
+        self.header = header
+        return header
+    
+    def _update_dimensions(self, state, ctrl_state):
+        """Update dimensions for observables that were initially None."""
+        updated = False
+        
+        # Update state observation dimensions
+        for obs_name in self.state_obs_names:
+            if self.obs_dimensions.get(obs_name) is None:
+                value = state.get(obs_name, None)
+                flat_value = self._flatten_value(value)
+                if flat_value is not None and len(flat_value) > 0:
+                    self.obs_dimensions[obs_name] = len(flat_value)
+                    updated = True
+        
+        # Update controller observation dimensions
+        for obs_name in self.quadrupedpympc_observables_names:
+            if self.obs_dimensions.get(obs_name) is None:
+                value = ctrl_state.get(obs_name, None)
+                flat_value = self._flatten_value(value)
+                if flat_value is not None and len(flat_value) > 0:
+                    self.obs_dimensions[obs_name] = len(flat_value)
+                    updated = True
+        
+        # Rebuild header if dimensions were updated
+        if updated:
+            self._rebuild_header()
+    
+    def _rebuild_header(self):
+        """Rebuild header after dimension updates."""
+        header = ['time']
+        
+        for obs_name in self.state_obs_names:
+            dim = self.obs_dimensions.get(obs_name, None)
+            if dim is not None:
+                if dim == 1:
+                    header.append(obs_name)
+                else:
+                    for i in range(dim):
+                        header.append(f"{obs_name}_{i}")
+        
+        for obs_name in self.quadrupedpympc_observables_names:
+            dim = self.obs_dimensions.get(obs_name, None)
+            if dim is not None:
+                if dim == 1:
+                    header.append(obs_name)
+                else:
+                    for i in range(dim):
+                        header.append(f"{obs_name}_{i}")
+        
+        self.header = header
+    
+    def record_step(self, time, state, ctrl_state):
+        """Record data from a single simulation step.
+        
+        Args:
+            time: Simulation time for this step
+            state: State dictionary from env.step()
+            ctrl_state: Controller state dictionary from quadrupedpympc_wrapper.get_obs()
+        """
+        # Initialize header on first call
+        if self.header is None:
+            self._build_header(time, state, ctrl_state)
+        else:
+            # Check if we need to update dimensions for previously None values
+            self._update_dimensions(state, ctrl_state)
+        
+        # Build data row
+        row = [time]
+        
+        # Add state observations
+        for obs_name in self.state_obs_names:
+            value = state.get(obs_name, None)
+            flat_value = self._flatten_value(value)
+            
+            expected_dim = self.obs_dimensions.get(obs_name, 0)
+            if expected_dim is None:
+                expected_dim = 0
+            
+            if flat_value is not None and len(flat_value) > 0:
+                # Pad or truncate to expected dimension
+                if len(flat_value) < expected_dim:
+                    flat_value = np.pad(flat_value, (0, expected_dim - len(flat_value)), constant_values=0)
+                elif len(flat_value) > expected_dim:
+                    flat_value = flat_value[:expected_dim]
+                row.extend(flat_value.tolist())
+            else:
+                # Fill with zeros
+                row.extend([0.0] * expected_dim)
+        
+        # Add controller observations
+        for obs_name in self.quadrupedpympc_observables_names:
+            value = ctrl_state.get(obs_name, None)
+            flat_value = self._flatten_value(value)
+            
+            expected_dim = self.obs_dimensions.get(obs_name, 0)
+            if expected_dim is None:
+                expected_dim = 0
+            
+            if flat_value is not None and len(flat_value) > 0:
+                # Pad or truncate to expected dimension
+                if len(flat_value) < expected_dim:
+                    flat_value = np.pad(flat_value, (0, expected_dim - len(flat_value)), constant_values=0)
+                elif len(flat_value) > expected_dim:
+                    flat_value = flat_value[:expected_dim]
+                row.extend(flat_value.tolist())
+            else:
+                # Fill with zeros
+                row.extend([0.0] * expected_dim)
+        
+        self.all_data.append(row)
+    
+    def save_to_mat(self, filepath):
+        """Save collected data to a MATLAB .mat file.
+        
+        Args:
+            filepath: Path where the .mat file should be saved
+        """
+        if not SCIPY_AVAILABLE:
+            raise ImportError(
+                "scipy is required for .mat file export but is not installed. "
+                "Please install it with: pip install scipy"
+            )
+        
+        if not self.all_data:
+            print("⚠️  No data to save")
+            return
+        
+        # Convert to numpy array
+        data = np.array(self.all_data, dtype=np.float64)
+        
+        # Ensure header and data columns match
+        if self.header is not None and data.shape[1] != len(self.header):
+            print(f"⚠️  Warning: Header length ({len(self.header)}) doesn't match data columns ({data.shape[1]})")
+            # Adjust header or data as needed
+            if data.shape[1] < len(self.header):
+                self.header = self.header[:data.shape[1]]
+            else:
+                # Pad header
+                for i in range(len(self.header), data.shape[1]):
+                    self.header.append(f"unknown_{i}")
+        
+        # Create the .mat structure
+        mat_dict = {
+            'header': np.array(self.header, dtype=object),
+            'data': data
+        }
+        
+        # Ensure directory exists
+        filepath = pathlib.Path(filepath)
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Save to .mat file
+        savemat(filepath, mat_dict)
+        print(f"✓ Saved {len(self.all_data)} steps to {filepath}")
+
+
 def run_simulation(
     qpympc_cfg,
     process=0,
@@ -73,6 +329,7 @@ def run_simulation(
     seed=0,
     render=True,
     recording_path: PathLike = None,
+    mat_logging: bool = True,
 ):
     np.set_printoptions(precision=3, suppress=True)
     np.random.seed(seed)
@@ -92,7 +349,7 @@ def run_simulation(
     #     print(f"Loading custom scene from: {custom_scene_path}")
 
     # Save all observables available.
-    state_obs_names = []#list(QuadrupedEnv.ALL_OBS)  # + list(IMU.ALL_OBS)
+    state_obs_names = list(QuadrupedEnv.ALL_OBS)  # + list(IMU.ALL_OBS)
 
     # Create the quadruped robot environment -----------------------------------------------------------
     # Note: gym_quadruped may need the scene parameter to be a path for custom scenes
@@ -220,6 +477,49 @@ def run_simulation(
         print(f"\n Recording data to: {dataset_path.absolute()}")
     else:
         h5py_writer = None
+    
+    # MATLAB .mat file logging ---------------------------------------------------------------------------------
+    if mat_logging:
+        if not SCIPY_AVAILABLE:
+            print("⚠️  scipy is not installed. MATLAB .mat logging disabled.")
+            print("   Install scipy with: pip install scipy")
+            mat_logger = None
+        else:
+            mat_logger = MatLogger(
+                state_obs_names=state_obs_names,
+                quadrupedpympc_observables_names=quadrupedpympc_observables_names
+            )
+            
+            # Create log directory and filename
+            log_root = pathlib.Path("log") / scene_name
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            # Format velocity and friction for filename
+            if isinstance(ref_base_lin_vel, (tuple, list)):
+                lin_vel_str = f"{ref_base_lin_vel[0]:.1f}-{ref_base_lin_vel[1]:.1f}"
+            else:
+                lin_vel_str = f"{ref_base_lin_vel:.1f}"
+            
+            if isinstance(ref_base_ang_vel, (tuple, list)):
+                ang_vel_str = f"{ref_base_ang_vel[0]:.1f}-{ref_base_ang_vel[1]:.1f}"
+            else:
+                ang_vel_str = f"{ref_base_ang_vel:.1f}"
+            
+            if isinstance(friction_coeff, (tuple, list)):
+                friction_str = f"{friction_coeff[0]:.1f}-{friction_coeff[1]:.1f}"
+            else:
+                friction_str = f"{friction_coeff:.1f}"
+            
+            mat_filename = (
+                f"{robot_name}_{scene_name}_"
+                f"linvel{lin_vel_str}_angvel{ang_vel_str}_"
+                f"friction{friction_str}_"
+                f"seed{seed}_{timestamp}.mat"
+            )
+            mat_filepath = log_root / mat_filename
+            print(f"\n MATLAB .mat logging enabled. Will save to: {mat_filepath.absolute()}")
+    else:
+        mat_logger = None
 
     # -----------------------------------------------------------------------------------------------------------
     RENDER_FREQ = 30  # Hz
@@ -322,6 +622,10 @@ def run_simulation(
             ep_state_history.append(state)
             ep_time.append(env.simulation_time)
             ep_ctrl_state_history.append(ctrl_state)
+            
+            # Record to MATLAB logger if enabled
+            if mat_logger is not None:
+                mat_logger.record_step(env.simulation_time, state, ctrl_state)
 
             # Render only at a certain frequency -----------------------------------------------------------------
             if render and (time.time() - last_render_time > 1.0 / RENDER_FREQ or env.step_num == 1):
@@ -405,6 +709,10 @@ def run_simulation(
         keyboard_thread.join(timeout=1.0)
     if video_recorder is not None:
         video_recorder.cleanup()
+    
+    # Save MATLAB .mat file if logging is enabled
+    if mat_logger is not None:
+        mat_logger.save_to_mat(mat_filepath)
 
     env.close()
     if h5py_writer is not None:
