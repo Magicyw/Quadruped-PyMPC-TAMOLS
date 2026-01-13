@@ -18,6 +18,9 @@ class SwingTrajectoryController:
         elif self.generator == "bezier_ref":
             from .swing_generators.bezier_ref_swing_trajectory_generator import SwingTrajectoryGenerator
             self.swing_generator = SwingTrajectoryGenerator(swing_period=swing_period, step_height=step_height)
+        elif self.generator == "quintic_edge":
+            from .swing_generators.quintic_edge_swing_trajectory_generator import SwingTrajectoryGenerator
+            self.swing_generator = SwingTrajectoryGenerator(swing_period=swing_period, step_height=step_height)
         else:
             from .swing_generators.explicit_swing_trajectory_generator import SwingTrajectoryGenerator
             self.swing_generator = SwingTrajectoryGenerator(swing_period=swing_period, step_height=step_height)
@@ -39,6 +42,9 @@ class SwingTrajectoryController:
         elif self.generator == "bezier_ref":
             from .swing_generators.bezier_ref_swing_trajectory_generator import SwingTrajectoryGenerator
             self.swing_generator = SwingTrajectoryGenerator(swing_period=swing_period, step_height=step_height)
+        elif self.generator == "quintic_edge":
+            from .swing_generators.quintic_edge_swing_trajectory_generator import SwingTrajectoryGenerator
+            self.swing_generator = SwingTrajectoryGenerator(swing_period=swing_period, step_height=step_height)
         else:
             from .swing_generators.explicit_swing_trajectory_generator import SwingTrajectoryGenerator
             self.swing_generator = SwingTrajectoryGenerator(swing_period=swing_period, step_height=step_height)
@@ -46,7 +52,7 @@ class SwingTrajectoryController:
         self.swing_period = swing_period
 
     def compute_swing_control_cartesian_space(
-        self, leg_id, q_dot, J, J_dot, lift_off, touch_down, foot_pos, foot_vel, passive_force, h, mass_matrix, early_stance_hitmoments, early_stance_hitpoints
+        self, leg_id, q_dot, J, J_dot, lift_off, touch_down, foot_pos, foot_vel, passive_force, h, mass_matrix, early_stance_hitmoments, early_stance_hitpoints, heightmap=None
     ):
         """TODO: Docstring.
 
@@ -64,15 +70,22 @@ class SwingTrajectoryController:
             foot_vel:
             h:
             mass_matrix:
+            heightmap: Optional heightmap for edge-aware trajectory generation
 
         Returns:
         -------
 
         """
         # Compute trajectory references
-        des_foot_pos, des_foot_vel, des_foot_acc = self.swing_generator.compute_trajectory_references(
-            self.swing_time[leg_id], lift_off, touch_down, early_stance_hitmoments, early_stance_hitpoints
-        )
+        # Pass heightmap only if generator supports it (quintic_edge)
+        if self.generator == "quintic_edge" and heightmap is not None:
+            des_foot_pos, des_foot_vel, des_foot_acc = self.swing_generator.compute_trajectory_references(
+                self.swing_time[leg_id], lift_off, touch_down, early_stance_hitmoments, early_stance_hitpoints, heightmap
+            )
+        else:
+            des_foot_pos, des_foot_vel, des_foot_acc = self.swing_generator.compute_trajectory_references(
+                self.swing_time[leg_id], lift_off, touch_down, early_stance_hitmoments, early_stance_hitpoints
+            )
 
         err_pos = des_foot_pos - foot_pos
         err_pos = err_pos.reshape((3,))

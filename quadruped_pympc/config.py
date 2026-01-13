@@ -193,13 +193,20 @@ mpc_params = {
 
 simulation_params = {
     # bezier_ref的效果最好
-    'swing_generator':             'bezier_ref',  # 'scipy', 'explicit', 'bezier_ref'
+    'swing_generator':             'bezier_ref',  # 'scipy', 'explicit', 'bezier_ref', 'quintic_edge'
     'swing_position_gain_fb':      500,
     'swing_velocity_gain_fb':      10,
     'impedence_joint_position_gain':  10.0,
     'impedence_joint_velocity_gain':  2.0,
 
     'step_height':                 0.3 * hip_height,  
+
+    # Quintic edge-based swing trajectory parameters (only used when swing_generator='quintic_edge')
+    'swing_edge_clearance':        0.025,  # [m] Minimum clearance above terrain during swing
+    'swing_edge_samples':          25,     # Number of samples for edge detection along trajectory
+    'swing_edge_delta_h':          0.01,   # [m] Height increment for iterative apex adjustment
+    'swing_edge_traj_samples':     20,     # Number of samples for clearance validation
+    'reflex_max_step_height':      0.15,   # [m] Maximum apex height for obstacle clearance
 
     # Visual Foothold adapatation
     "visual_foothold_adaptation":  'tamols', #'blind', 'height', 'vfa', 'tamols'

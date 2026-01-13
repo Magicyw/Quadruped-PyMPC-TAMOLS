@@ -49,12 +49,21 @@ class SwingTrajectoryGenerator:
         self.swing_period = swing_period
         self.half_swing_period = swing_period / 2.0
         
-        # Configuration parameters (can be overridden)
-        self.clearance = 0.025  # Minimum clearance above terrain (m)
-        self.edge_samples = 25  # Number of samples along trajectory for edge detection
-        self.traj_samples = 20  # Number of samples for clearance checking
-        self.delta_h = 0.01  # Height increment for iterative lifting (m)
-        self.max_step_height = 0.15  # Maximum apex height (m)
+        # Configuration parameters - try to load from config, otherwise use defaults
+        try:
+            from quadruped_pympc import config as cfg
+            self.clearance = cfg.simulation_params.get('swing_edge_clearance', 0.025)
+            self.edge_samples = cfg.simulation_params.get('swing_edge_samples', 25)
+            self.traj_samples = cfg.simulation_params.get('swing_edge_traj_samples', 20)
+            self.delta_h = cfg.simulation_params.get('swing_edge_delta_h', 0.01)
+            self.max_step_height = cfg.simulation_params.get('reflex_max_step_height', 0.15)
+        except (ImportError, AttributeError, KeyError):
+            # Use default values if config is not available
+            self.clearance = 0.025  # Minimum clearance above terrain (m)
+            self.edge_samples = 25  # Number of samples along trajectory for edge detection
+            self.traj_samples = 20  # Number of samples for clearance checking
+            self.delta_h = 0.01  # Height increment for iterative lifting (m)
+            self.max_step_height = 0.15  # Maximum apex height (m)
         
         # Cache for trajectory coefficients
         self._cached_coeffs_A = None
