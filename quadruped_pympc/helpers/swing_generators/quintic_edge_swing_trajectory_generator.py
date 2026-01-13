@@ -65,6 +65,10 @@ class SwingTrajectoryGenerator:
             self.delta_h = 0.01  # Height increment for iterative lifting (m)
             self.max_step_height = 0.15  # Maximum apex height (m)
         
+        # Gradient estimation parameters
+        self.gradient_delta = 0.04  # [m] Distance for finite difference gradient estimation
+        self.heightmap_z_offset = 0.02  # [m] Offset added by heightmap.get_height() sensor model
+        
         # Cache for trajectory coefficients
         self._cached_coeffs_A = None
         self._cached_coeffs_B = None
@@ -165,7 +169,7 @@ class SwingTrajectoryGenerator:
         alphas = np.linspace(0, 1, self.edge_samples)
         edge_scores = []
         
-        delta = 0.04  # Distance for gradient estimation
+        delta = self.gradient_delta
         
         for alpha in alphas:
             # Interpolate XY position
@@ -226,7 +230,7 @@ class SwingTrajectoryGenerator:
         Returns:
             Normalized step normal vector [nx, ny, nz] with positive z component
         """
-        delta = 0.04  # Distance for gradient estimation
+        delta = self.gradient_delta
         
         # Query heights around edge point
         edge_point = np.array([edge_point_xy[0], edge_point_xy[1], 0.0])
@@ -381,8 +385,8 @@ class SwingTrajectoryGenerator:
             # Query terrain height at this XY location
             terrain_z = heightmap.get_height(pos)
             if terrain_z is not None:
-                # Check clearance (heightmap.get_height adds 0.02, so we subtract it)
-                terrain_z_actual = terrain_z - 0.02
+                # Check clearance (heightmap.get_height adds self.heightmap_z_offset, so subtract it)
+                terrain_z_actual = terrain_z - self.heightmap_z_offset
                 if pos[2] < terrain_z_actual + self.clearance:
                     return False
         
@@ -418,7 +422,7 @@ class SwingTrajectoryGenerator:
         edge_point_3d = np.array([edge_point_xy[0], edge_point_xy[1], 0.0])
         terrain_z_at_edge = heightmap.get_height(edge_point_3d)
         if terrain_z_at_edge is not None:
-            base_z = max(terrain_z_at_edge - 0.02, lift_off[2], touch_down[2])
+            base_z = max(terrain_z_at_edge - self.heightmap_z_offset, lift_off[2], touch_down[2])
         else:
             base_z = max(lift_off[2], touch_down[2])
         
@@ -519,8 +523,8 @@ class SwingTrajectoryGenerator:
                     coeffs_A, coeffs_B, midpoint = self._compute_trajectory_with_heightmap(
                         lift_off, touch_down, heightmap
                     )
-                except Exception:
-                    # Fallback if heightmap processing fails
+                except (AttributeError, TypeError, ValueError) as e:
+                    # Fallback if heightmap processing fails (invalid heightmap or query errors)
                     coeffs_A, coeffs_B, midpoint = self._compute_trajectory_without_heightmap(
                         lift_off, touch_down
                     )
@@ -739,18 +743,24 @@ if __name__ == "__main__":
     
     # Create a simple synthetic heightmap with a step at x=0.15
     class SyntheticHeightMap:
-        def __init__(self, step_location=0.15, step_height=0.05):
+        def __init__(self, step_location=0.15, step_height=0.05, z_offset=0.02):
             self.step_location = step_location
             self.step_height = step_height
+            self.z_offset = z_offset
         
         def get_height(self, pos):
             # Return height based on x position
             if pos[0] < self.step_location:
-                return 0.02  # Ground level (with sensor offset)
+                return self.z_offset  # Ground level (with sensor offset)
             else:
-                return self.step_height + 0.02  # Step up
+                return self.step_height + self.z_offset  # Step up
     
-    synthetic_heightmap = SyntheticHeightMap(step_location=0.15, step_height=0.05)
+    # Use the generator's heightmap_z_offset for consistency
+    synthetic_heightmap = SyntheticHeightMap(
+        step_location=0.15, 
+        step_height=0.05,
+        z_offset=trajectory_generator.heightmap_z_offset
+    )
     
     # Use more relaxed clearance for testing (10mm) and skip more boundary points
     original_clearance = trajectory_generator.clearance
@@ -792,7 +802,7 @@ if __name__ == "__main__":
         # Skip first 50 and last 50 points (boundaries)
         if i < 50 or i >= len(position_points_2) - 50:
             continue
-        terrain_z = synthetic_heightmap.get_height(pos) - 0.02
+        terrain_z = synthetic_heightmap.get_height(pos) - trajectory_generator.heightmap_z_offset
         clearance = pos[2] - terrain_z
         min_clearance = min(min_clearance, clearance)
         if clearance < trajectory_generator.clearance:
